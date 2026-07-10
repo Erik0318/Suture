@@ -73,13 +73,14 @@ mod tests {
 
     #[test]
     fn settings_round_trip() {
-        let mut settings = Settings::default();
-        settings.include_subfolders = true;
-        settings.audio_format = AudioFormat::MkaOpus;
+        let settings = Settings {
+            include_subfolders: true,
+            audio_format: AudioFormat::MkaOpus,
+            ..Settings::default()
+        };
         let json = serde_json::to_string(&settings).unwrap();
         let decoded: Settings = serde_json::from_str(&json).unwrap();
         assert!(decoded.include_subfolders);
         assert_eq!(decoded.audio_format, AudioFormat::MkaOpus);
     }
 }
-

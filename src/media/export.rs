@@ -491,10 +491,11 @@ fn run_export(
     }
     fs::rename(&partial, final_output)?;
     let mut warnings = Vec::new();
-    if options.kind == ExportKind::Audio && options.audio_format == AudioFormat::Flac {
-        if tracks.iter().any(|track| !track.lossless) {
-            warnings.push("Lossless output prevents further lossy compression, but cannot restore information already removed from the source.".into());
-        }
+    if options.kind == ExportKind::Audio
+        && options.audio_format == AudioFormat::Flac
+        && tracks.iter().any(|track| !track.lossless)
+    {
+        warnings.push("Lossless output prevents further lossy compression, but cannot restore information already removed from the source.".into());
     }
     if options.write_cue && options.kind == ExportKind::Audio {
         let cue = final_output.with_extension("cue");
