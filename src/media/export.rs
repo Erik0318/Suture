@@ -271,6 +271,14 @@ fn build_args(
         args.push((options.fps * 2).to_string().into());
         args.extend(video_audio_args(options.video_audio_codec));
         args.push("-shortest".into());
+        args.push("-t".into());
+        args.push(
+            format!(
+                "{:.6}",
+                tracks.iter().map(|track| track.duration_secs).sum::<f64>()
+            )
+            .into(),
+        );
     } else {
         args.extend(["-map", "[aout]"].map(OsString::from));
         args.extend(output_audio_args(options.audio_format));
