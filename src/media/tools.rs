@@ -39,4 +39,3 @@ pub fn verify_media_tools() -> Vec<String> {
         })
         .collect()
 }
-

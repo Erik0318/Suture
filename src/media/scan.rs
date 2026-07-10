@@ -28,7 +28,8 @@ fn collect_files(inputs: &[PathBuf], recursive: bool) -> (Vec<PathBuf>, Option<P
     for input in inputs {
         if input.is_file() {
             files.push(input.clone());
-            primary_folder.get_or_insert_with(|| input.parent().unwrap_or(Path::new(".")).to_path_buf());
+            primary_folder
+                .get_or_insert_with(|| input.parent().unwrap_or(Path::new(".")).to_path_buf());
         } else if input.is_dir() {
             primary_folder.get_or_insert_with(|| input.clone());
             let depth = if recursive { usize::MAX } else { 1 };
@@ -114,7 +115,9 @@ pub fn spawn(inputs: Vec<PathBuf>, recursive: bool, tx: Sender<UiEvent>) {
         }
         let partial_numbering = sort::sort_tracks(&mut tracks);
         if partial_numbering {
-            warnings.push("Partial filename numbering detected; numbered tracks were placed first".into());
+            warnings.push(
+                "Partial filename numbering detected; numbered tracks were placed first".into(),
+            );
         }
         let suggested_cover = primary_folder.as_deref().and_then(|folder| {
             cover::discover(folder, tracks.first().map(|track| track.path.as_path()))

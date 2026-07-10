@@ -14,4 +14,3 @@ fn main() -> eframe::Result<()> {
         Box::new(|cc| Ok(Box::new(suture::app::SutureApp::new(cc)))),
     )
 }
-

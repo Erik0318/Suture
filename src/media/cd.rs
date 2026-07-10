@@ -25,7 +25,9 @@ pub fn enumerate_drives() -> anyhow::Result<Vec<CdDrive>> {
         if device.property_value("ID_CDROM").is_none() {
             continue;
         }
-        let Some(devnode) = device.devnode() else { continue };
+        let Some(devnode) = device.devnode() else {
+            continue;
+        };
         let vendor = device
             .property_value("ID_VENDOR")
             .and_then(|value| value.to_str())

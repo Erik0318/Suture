@@ -31,13 +31,20 @@ pub fn show(ui: &mut Ui, progress: &ProgressInfo, reduced_motion: bool) {
         Stroke::new(2.0_f32, inactive.gamma_multiply(0.45)),
     );
     painter.line_segment(
-        [egui::pos2(left, y), egui::pos2(left + (right - left) * fraction, y)],
+        [
+            egui::pos2(left, y),
+            egui::pos2(left + (right - left) * fraction, y),
+        ],
         Stroke::new(3.0_f32, accent),
     );
 
     let nodes = progress.track_count.clamp(1, 24);
     for slot in 0..nodes {
-        let t = if nodes == 1 { 0.5 } else { slot as f32 / (nodes - 1) as f32 };
+        let t = if nodes == 1 {
+            0.5
+        } else {
+            slot as f32 / (nodes - 1) as f32
+        };
         let x = egui::lerp(left..=right, t);
         let represented_track = slot * progress.track_count.max(1) / nodes;
         let active = progress.active_track.unwrap_or(0);
@@ -52,21 +59,13 @@ pub fn show(ui: &mut Ui, progress: &ProgressInfo, reduced_motion: bool) {
         if completed {
             painter.circle_filled(egui::pos2(x, y), 4.0_f32 + pulse, accent);
         } else {
-            painter.circle_stroke(
-                egui::pos2(x, y),
-                5.0_f32,
-                Stroke::new(1.5_f32, inactive),
-            );
+            painter.circle_stroke(egui::pos2(x, y), 5.0_f32, Stroke::new(1.5_f32, inactive));
         }
     }
     if progress.fraction.is_none() && !reduced_motion {
         let time = ui.input(|input| input.time) as f32;
         let t = (time * 0.35).fract();
-        painter.circle_filled(
-            egui::pos2(egui::lerp(left..=right, t), y),
-            4.5_f32,
-            accent,
-        );
+        painter.circle_filled(egui::pos2(egui::lerp(left..=right, t), y), 4.5_f32, accent);
     }
 
     ui.horizontal_wrapped(|ui| {
@@ -79,7 +78,8 @@ pub fn show(ui: &mut Ui, progress: &ProgressInfo, reduced_motion: bool) {
         }
     });
     ui.add_space(2.0);
-    let bar = egui::ProgressBar::new(fraction).animate(progress.fraction.is_none() && !reduced_motion);
+    let bar =
+        egui::ProgressBar::new(fraction).animate(progress.fraction.is_none() && !reduced_motion);
     ui.add(bar);
 }
 

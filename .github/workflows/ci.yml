@@ -33,6 +33,7 @@ jobs:
         run: cargo test --locked --all-features
 
   appimage:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: test
     runs-on: ubuntu-22.04
     steps:

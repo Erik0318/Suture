@@ -55,7 +55,9 @@ fn escape_ffmetadata(value: &str) -> String {
 }
 
 fn create_workspace(tracks: &[Track]) -> anyhow::Result<Workspace> {
-    let temp = tempfile::Builder::new().prefix("suture-export-").tempdir()?;
+    let temp = tempfile::Builder::new()
+        .prefix("suture-export-")
+        .tempdir()?;
     let mut inputs = Vec::with_capacity(tracks.len());
     let mut manifest = String::new();
     let mut metadata = String::from(";FFMETADATA1\n");
@@ -141,19 +143,24 @@ fn common_audio_parameters(tracks: &[Track]) -> anyhow::Result<(u32, String)> {
     {
         bail!("The selected tracks use different channel counts. Suture will not downmix them silently.");
     }
-    let same_rate = tracks.iter().all(|track| track.sample_rate == first.sample_rate);
+    let same_rate = tracks
+        .iter()
+        .all(|track| track.sample_rate == first.sample_rate);
     let rate = if same_rate {
         first.sample_rate.unwrap_or(44_100)
     } else {
         44_100
     };
-    let layout = first.channel_layout.clone().unwrap_or_else(|| match first_channels {
-        1 => "mono".into(),
-        2 => "stereo".into(),
-        6 => "5.1".into(),
-        8 => "7.1".into(),
-        count => format!("{count}c"),
-    });
+    let layout = first
+        .channel_layout
+        .clone()
+        .unwrap_or_else(|| match first_channels {
+            1 => "mono".into(),
+            2 => "stereo".into(),
+            6 => "5.1".into(),
+            8 => "7.1".into(),
+            count => format!("{count}c"),
+        });
     if !layout
         .chars()
         .all(|ch| ch.is_ascii_alphanumeric() || ".()_-".contains(ch))
@@ -227,8 +234,7 @@ fn build_args(
         args.push("-i".into());
         args.push(workspace.metadata.as_os_str().to_owned());
         args.extend(
-            ["-map", "0:a:0", "-map_metadata", "1", "-map_chapters", "1"]
-                .map(OsString::from),
+            ["-map", "0:a:0", "-map_metadata", "1", "-map_chapters", "1"].map(OsString::from),
         );
         args.extend(output_audio_args(options.audio_format));
         args.push(partial.as_os_str().to_owned());
@@ -263,8 +269,20 @@ fn build_args(
         args.extend(["-map", "0:v:0", "-map", "[aout]", "-vf"].map(OsString::from));
         args.push(cover_filter(options.cover_mode).into());
         args.extend(
-            ["-c:v", "libx264", "-tune", "stillimage", "-preset", "medium", "-crf", "30", "-pix_fmt", "yuv420p", "-r"]
-                .map(OsString::from),
+            [
+                "-c:v",
+                "libx264",
+                "-tune",
+                "stillimage",
+                "-preset",
+                "medium",
+                "-crf",
+                "30",
+                "-pix_fmt",
+                "yuv420p",
+                "-r",
+            ]
+            .map(OsString::from),
         );
         args.push(options.fps.to_string().into());
         args.push("-g".into());
@@ -353,7 +371,10 @@ fn run_export(
     cancel: &CancelToken,
     tx: &Sender<UiEvent>,
 ) -> anyhow::Result<(PathBuf, Vec<String>)> {
-    let final_output = options.output.as_ref().ok_or_else(|| anyhow!("Choose an output file"))?;
+    let final_output = options
+        .output
+        .as_ref()
+        .ok_or_else(|| anyhow!("Choose an output file"))?;
     if tracks.is_empty() {
         bail!("No audio selected");
     }
@@ -388,8 +409,14 @@ fn run_export(
         .spawn()
         .context("Could not start the bundled FFmpeg")?;
 
-    let stdout = child.stdout.take().ok_or_else(|| anyhow!("FFmpeg progress pipe was unavailable"))?;
-    let stderr = child.stderr.take().ok_or_else(|| anyhow!("FFmpeg error pipe was unavailable"))?;
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| anyhow!("FFmpeg progress pipe was unavailable"))?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| anyhow!("FFmpeg error pipe was unavailable"))?;
     let (progress_tx, progress_rx) = unbounded::<(Option<f64>, Option<String>)>();
     thread::spawn(move || {
         let mut current_time = None;
@@ -408,7 +435,9 @@ fn run_export(
     let error_log_writer = error_log.clone();
     thread::spawn(move || {
         let mut text = String::new();
-        let _ = BufReader::new(stderr).take(512 * 1024).read_to_string(&mut text);
+        let _ = BufReader::new(stderr)
+            .take(512 * 1024)
+            .read_to_string(&mut text);
         if let Ok(mut target) = error_log_writer.lock() {
             *target = text;
         }
@@ -429,9 +458,9 @@ fn run_export(
                 None
             };
             let elapsed = start.elapsed().as_secs_f64();
-            let eta = fraction.filter(|value| *value > 0.01).map(|value| {
-                (elapsed / value as f64 - elapsed).max(0.0)
-            });
+            let eta = fraction
+                .filter(|value| *value > 0.01)
+                .map(|value| (elapsed / value as f64 - elapsed).max(0.0));
             let active = tracks
                 .iter()
                 .scan(0.0, |cursor, track| {
@@ -447,9 +476,15 @@ fn run_export(
                     "Stitching {} of {}{}",
                     duration_label(encoded),
                     duration_label(total_duration),
-                    speed.as_deref().map(|value| format!(" at {value}")).unwrap_or_default()
+                    speed
+                        .as_deref()
+                        .map(|value| format!(" at {value}"))
+                        .unwrap_or_default()
                 ),
-                detail: tracks.get(active).map(|track| track.label().to_owned()).unwrap_or_default(),
+                detail: tracks
+                    .get(active)
+                    .map(|track| track.label().to_owned())
+                    .unwrap_or_default(),
                 elapsed_secs: elapsed,
                 eta_secs: eta,
                 speed,
@@ -508,7 +543,9 @@ fn run_export(
     if options.write_cue && options.kind == ExportKind::Audio {
         let cue = final_output.with_extension("cue");
         if let Err(error) = write_cue(&cue, tracks, final_output) {
-            warnings.push(format!("The audio was exported, but the CUE sheet failed: {error}"));
+            warnings.push(format!(
+                "The audio was exported, but the CUE sheet failed: {error}"
+            ));
         }
     }
     Ok((final_output.clone(), warnings))
