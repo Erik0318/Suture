@@ -80,3 +80,21 @@ pub fn discover(folder: &Path, first_track: Option<&Path>) -> Option<PathBuf> {
 pub fn validate(path: &Path) -> anyhow::Result<()> {
     load_color_image(path).map(|_| ()).map_err(|error| anyhow!(error))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{fs::File, io::BufWriter};
+
+    #[test]
+    fn detects_image_content_with_unknown_extension() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("cover.pic");
+        let image = image::RgbaImage::from_pixel(2, 2, image::Rgba([1, 2, 3, 255]));
+        image::DynamicImage::ImageRgba8(image)
+            .write_to(&mut BufWriter::new(File::create(&path).unwrap()), image::ImageFormat::Png)
+            .unwrap();
+        assert!(is_image_content(&path));
+        assert!(load_color_image(&path).is_ok());
+    }
+}

@@ -584,4 +584,64 @@ mod tests {
         let duration = probe::probe_duration(&output).unwrap();
         assert!((duration - 0.5).abs() < 0.1, "duration was {duration}");
     }
+
+    #[test]
+    fn exports_static_cover_mkv_end_to_end() {
+        if Command::new(sidecar("ffmpeg"))
+            .arg("-version")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .is_err()
+        {
+            return;
+        }
+        let temp = tempfile::tempdir().unwrap();
+        let track_path = temp.path().join("01 tone.flac");
+        let status = Command::new(sidecar("ffmpeg"))
+            .args(["-v", "error", "-y", "-f", "lavfi", "-i"])
+            .arg("sine=frequency=440:duration=0.35")
+            .args(["-c:a", "flac"])
+            .arg(&track_path)
+            .status()
+            .unwrap();
+        assert!(status.success());
+        let tracks = vec![probe::probe_audio(&track_path, 0).unwrap()];
+
+        let cover = temp.path().join("odd cover.png");
+        image::RgbaImage::from_pixel(301, 303, image::Rgba([30, 30, 30, 255]))
+            .save(&cover)
+            .unwrap();
+        let output = temp.path().join("joined.mkv");
+        let options = ExportOptions {
+            kind: ExportKind::Video,
+            output: Some(output.clone()),
+            ..ExportOptions::default()
+        };
+        let (tx, _rx) = unbounded();
+        run_export(
+            &tracks,
+            Some(&cover),
+            &options,
+            &CancelToken::default(),
+            &tx,
+        )
+        .unwrap();
+        assert!(output.is_file());
+        let details = Command::new(sidecar("ffprobe"))
+            .args([
+                "-v",
+                "error",
+                "-show_entries",
+                "stream=codec_type,codec_name",
+                "-of",
+                "json",
+            ])
+            .arg(&output)
+            .output()
+            .unwrap();
+        let details = String::from_utf8_lossy(&details.stdout);
+        assert!(details.contains("h264"), "{details}");
+        assert!(details.contains("flac"), "{details}");
+    }
 }

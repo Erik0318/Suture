@@ -4,7 +4,7 @@
 
 ```bash
 sudo dnf install rust cargo gcc gcc-c++ pkgconf-pkg-config systemd-devel \
-  gtk3-devel libxkbcommon-devel wayland-devel ffmpeg-free cdparanoia
+  gtk3-devel libxkbcommon-devel libxkbcommon-x11-devel wayland-devel ffmpeg-free cdparanoia
 cargo run
 ```
 
@@ -27,4 +27,3 @@ cargo test --all-features
 ## AppImage
 
 Release CI builds on Ubuntu 22.04, stages the Rust executable and media sidecars with linuxdeploy, and creates `Suture-<version>-x86_64.AppImage` plus its SHA-256 checksum. A version tag such as `v0.1.0` triggers the workflow after the CI job succeeds.
-
