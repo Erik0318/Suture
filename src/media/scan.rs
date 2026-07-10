@@ -52,7 +52,7 @@ pub fn spawn(inputs: Vec<PathBuf>, recursive: bool, tx: Sender<UiEvent>) {
         let (files, primary_folder) = collect_files(&inputs, recursive);
         let audio_candidates: Vec<_> = files
             .into_iter()
-            .filter(|path| !cover::looks_like_image(path))
+            .filter(|path| !cover::is_image_content(path))
             .collect();
         if audio_candidates.is_empty() {
             let _ = tx.send(UiEvent::ScanFailed("No files were found to probe".into()));
@@ -137,4 +137,3 @@ mod tests {
         assert!(!is_hidden(Path::new("album/track.flac")));
     }
 }
-

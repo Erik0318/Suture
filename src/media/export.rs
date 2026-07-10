@@ -183,7 +183,7 @@ fn audio_filter(indices: &[usize], rate: u32, layout: &str) -> String {
 
 fn cover_filter(mode: CoverMode) -> &'static str {
     match mode {
-        CoverMode::Fit => "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black,setsar=1",
+        CoverMode::Fit => "scale='min(iw,1920)':'min(ih,1080)':force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black,setsar=1",
         CoverMode::Fill => "scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,setsar=1",
         CoverMode::Original => "scale=trunc(iw/2)*2:trunc(ih/2)*2,setsar=1",
     }
@@ -529,6 +529,7 @@ pub fn compatible_video_codecs(container: VideoContainer) -> &'static [VideoAudi
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::media::probe;
 
     #[test]
     fn metadata_is_escaped() {
@@ -545,5 +546,42 @@ mod tests {
         let codecs = compatible_video_codecs(VideoContainer::Mp4);
         assert!(!codecs.contains(&VideoAudioCodec::Flac));
         assert!(!codecs.contains(&VideoAudioCodec::Opus));
+    }
+
+    #[test]
+    fn exports_two_flac_tracks_end_to_end() {
+        if Command::new(sidecar("ffmpeg"))
+            .arg("-version")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .is_err()
+        {
+            return;
+        }
+        let temp = tempfile::tempdir().unwrap();
+        let mut tracks = Vec::new();
+        for (index, frequency) in [440, 660].into_iter().enumerate() {
+            let path = temp.path().join(format!("{} tone.flac", index + 1));
+            let status = Command::new(sidecar("ffmpeg"))
+                .args(["-v", "error", "-y", "-f", "lavfi", "-i"])
+                .arg(format!("sine=frequency={frequency}:duration=0.25"))
+                .args(["-c:a", "flac"])
+                .arg(&path)
+                .status()
+                .unwrap();
+            assert!(status.success());
+            tracks.push(probe::probe_audio(&path, index).unwrap());
+        }
+        let output = temp.path().join("joined.flac");
+        let options = ExportOptions {
+            output: Some(output.clone()),
+            ..ExportOptions::default()
+        };
+        let (tx, _rx) = unbounded();
+        run_export(&tracks, None, &options, &CancelToken::default(), &tx).unwrap();
+        assert!(output.is_file());
+        let duration = probe::probe_duration(&output).unwrap();
+        assert!((duration - 0.5).abs() < 0.1, "duration was {duration}");
     }
 }

@@ -247,10 +247,7 @@ impl SutureApp {
     }
 
     fn choose_cover(&mut self, ctx: &egui::Context) {
-        if let Some(path) = rfd::FileDialog::new()
-            .add_filter("Images", &["jpg", "jpeg", "png", "webp", "bmp", "tif", "tiff", "gif"])
-            .pick_file()
-        {
+        if let Some(path) = rfd::FileDialog::new().pick_file() {
             self.set_cover(path, ctx);
         }
     }
@@ -382,6 +379,35 @@ impl SutureApp {
             ui.heading("Suture");
             ui.label(RichText::new("stitch tracks into one continuous piece").weak());
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                ui.menu_button("Settings", |ui| {
+                    ui.checkbox(
+                        &mut self.settings.include_subfolders,
+                        "Include subfolders when scanning",
+                    );
+                    ui.checkbox(&mut self.settings.reduced_motion, "Reduce motion");
+                    ui.separator();
+                    ui.label("Theme");
+                    if ui
+                        .selectable_label(self.settings.dark_theme.is_none(), "System (on restart)")
+                        .clicked()
+                    {
+                        self.settings.dark_theme = None;
+                    }
+                    if ui
+                        .selectable_label(self.settings.dark_theme == Some(false), "Light")
+                        .clicked()
+                    {
+                        self.settings.dark_theme = Some(false);
+                        ctx.set_visuals(egui::Visuals::light());
+                    }
+                    if ui
+                        .selectable_label(self.settings.dark_theme == Some(true), "Dark")
+                        .clicked()
+                    {
+                        self.settings.dark_theme = Some(true);
+                        ctx.set_visuals(egui::Visuals::dark());
+                    }
+                });
                 if ui.add_enabled(!self.busy, egui::Button::new("Add cover")).clicked() {
                     self.choose_cover(ctx);
                 }
@@ -501,6 +527,7 @@ impl SutureApp {
         if !pointer_down {
             self.dragging = None;
         }
+        let mut remove_one = None;
         egui::ScrollArea::vertical().max_height(310.0).show(ui, |ui| {
             for index in 0..self.tracks.len() {
                 let track = &self.tracks[index];
@@ -509,6 +536,21 @@ impl SutureApp {
                 let codec = track.codec.clone();
                 let sample = track.sample_rate.map(|rate| format!("{} kHz", rate as f32 / 1000.0)).unwrap_or_else(|| "? kHz".into());
                 let quality = if track.lossless { "lossless" } else { "lossy" };
+                let details = format!(
+                    "{}\n{} • {} ch • {}\n{}",
+                    track.path.display(),
+                    track.container,
+                    track.channels.unwrap_or(0),
+                    track
+                        .bit_depth
+                        .map(|bits| format!("{bits}-bit"))
+                        .unwrap_or_else(|| "unknown depth".into()),
+                    [track.artist.as_deref(), track.album.as_deref()]
+                        .into_iter()
+                        .flatten()
+                        .collect::<Vec<_>>()
+                        .join(" — ")
+                );
                 let row = ui.horizontal(|ui| {
                     let handle = ui.add(egui::Label::new("⠿").sense(Sense::drag()));
                     if handle.drag_started() {
@@ -525,12 +567,20 @@ impl SutureApp {
                     }
                     ui.label(label);
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        if ui
+                            .add_enabled(!self.busy, egui::Button::new("×").small())
+                            .on_hover_text("Remove this track")
+                            .clicked()
+                        {
+                            remove_one = Some(index);
+                        }
                         ui.label(quality);
                         ui.label(sample);
                         ui.label(codec);
                         ui.label(duration);
                     });
                 }).response;
+                let row = row.on_hover_text(details);
                 if row.hovered() && pointer_down {
                     if let Some(from) = self.dragging {
                         if from != index {
@@ -549,6 +599,10 @@ impl SutureApp {
                 ui.centered_and_justified(|ui| ui.label("Add a folder, files, or an audio CD to begin"));
             }
         });
+        if let Some(index) = remove_one {
+            self.tracks.remove(index);
+            self.selected.clear();
+        }
     }
 
     fn show_export_panel(&mut self, ui: &mut egui::Ui) {

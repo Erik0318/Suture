@@ -46,3 +46,51 @@ jobs:
           name: cargo-lock
           path: Cargo.lock
           if-no-files-found: ignore
+
+  appimage:
+    needs: test
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build and smoke-test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libudev-dev libgtk-3-dev libxkbcommon-dev libwayland-dev \
+            pkg-config ffmpeg cdparanoia curl file xvfb xauth
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build release binary
+        run: cargo build --locked --release
+      - name: Fetch linuxdeploy
+        run: |
+          curl -fL -o linuxdeploy-x86_64.AppImage \
+            https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          chmod +x linuxdeploy-x86_64.AppImage scripts/package-appimage.sh
+      - name: Package
+        run: scripts/package-appimage.sh "0.1.0-ci"
+      - name: Inspect bundled tools
+        run: |
+          APPIMAGE_EXTRACT_AND_RUN=1 ./Suture-0.1.0-ci-x86_64.AppImage --appimage-extract
+          test -x squashfs-root/usr/bin/suture
+          test -x squashfs-root/usr/lib/suture/ffmpeg
+          test -x squashfs-root/usr/lib/suture/ffprobe
+          test -x squashfs-root/usr/lib/suture/cdparanoia
+          squashfs-root/usr/lib/suture/ffmpeg -version
+          squashfs-root/usr/lib/suture/ffprobe -version
+          squashfs-root/usr/lib/suture/cdparanoia --version
+      - name: Headless launch smoke test
+        run: |
+          set +e
+          APPIMAGE_EXTRACT_AND_RUN=1 timeout 8s xvfb-run -a ./Suture-0.1.0-ci-x86_64.AppImage
+          status=$?
+          set -e
+          if [[ "$status" -ne 0 && "$status" -ne 124 ]]; then
+            exit "$status"
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Suture-AppImage-x86_64
+          path: |
+            Suture-0.1.0-ci-x86_64.AppImage
+            Suture-0.1.0-ci-x86_64.AppImage.sha256
