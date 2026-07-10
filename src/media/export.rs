@@ -55,7 +55,9 @@ fn escape_ffmetadata(value: &str) -> String {
 }
 
 fn create_workspace(tracks: &[Track]) -> anyhow::Result<Workspace> {
-    let temp = tempfile::Builder::new().prefix("suture-export-").tempdir()?;
+    let temp = tempfile::Builder::new()
+        .prefix("suture-export-")
+        .tempdir()?;
     let mut inputs = Vec::with_capacity(tracks.len());
     let mut manifest = String::new();
     let mut metadata = String::from(";FFMETADATA1\n");
@@ -141,19 +143,24 @@ fn common_audio_parameters(tracks: &[Track]) -> anyhow::Result<(u32, String)> {
     {
         bail!("The selected tracks use different channel counts. Suture will not downmix them silently.");
     }
-    let same_rate = tracks.iter().all(|track| track.sample_rate == first.sample_rate);
+    let same_rate = tracks
+        .iter()
+        .all(|track| track.sample_rate == first.sample_rate);
     let rate = if same_rate {
         first.sample_rate.unwrap_or(44_100)
     } else {
         44_100
     };
-    let layout = first.channel_layout.clone().unwrap_or_else(|| match first_channels {
-        1 => "mono".into(),
-        2 => "stereo".into(),
-        6 => "5.1".into(),
-        8 => "7.1".into(),
-        count => format!("{count}c"),
-    });
+    let layout = first
+        .channel_layout
+        .clone()
+        .unwrap_or_else(|| match first_channels {
+            1 => "mono".into(),
+            2 => "stereo".into(),
+            6 => "5.1".into(),
+            8 => "7.1".into(),
+            count => format!("{count}c"),
+        });
     if !layout
         .chars()
         .all(|ch| ch.is_ascii_alphanumeric() || ".()_-".contains(ch))
@@ -183,7 +190,7 @@ fn audio_filter(indices: &[usize], rate: u32, layout: &str) -> String {
 
 fn cover_filter(mode: CoverMode) -> &'static str {
     match mode {
-        CoverMode::Fit => "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black,setsar=1",
+        CoverMode::Fit => "scale='min(iw,1920)':'min(ih,1080)':force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:black,setsar=1",
         CoverMode::Fill => "scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,setsar=1",
         CoverMode::Original => "scale=trunc(iw/2)*2:trunc(ih/2)*2,setsar=1",
     }
@@ -227,8 +234,7 @@ fn build_args(
         args.push("-i".into());
         args.push(workspace.metadata.as_os_str().to_owned());
         args.extend(
-            ["-map", "0:a:0", "-map_metadata", "1", "-map_chapters", "1"]
-                .map(OsString::from),
+            ["-map", "0:a:0", "-map_metadata", "1", "-map_chapters", "1"].map(OsString::from),
         );
         args.extend(output_audio_args(options.audio_format));
         args.push(partial.as_os_str().to_owned());
@@ -263,14 +269,34 @@ fn build_args(
         args.extend(["-map", "0:v:0", "-map", "[aout]", "-vf"].map(OsString::from));
         args.push(cover_filter(options.cover_mode).into());
         args.extend(
-            ["-c:v", "libx264", "-tune", "stillimage", "-preset", "medium", "-crf", "30", "-pix_fmt", "yuv420p", "-r"]
-                .map(OsString::from),
+            [
+                "-c:v",
+                "libx264",
+                "-tune",
+                "stillimage",
+                "-preset",
+                "medium",
+                "-crf",
+                "30",
+                "-pix_fmt",
+                "yuv420p",
+                "-r",
+            ]
+            .map(OsString::from),
         );
         args.push(options.fps.to_string().into());
         args.push("-g".into());
         args.push((options.fps * 2).to_string().into());
         args.extend(video_audio_args(options.video_audio_codec));
         args.push("-shortest".into());
+        args.push("-t".into());
+        args.push(
+            format!(
+                "{:.6}",
+                tracks.iter().map(|track| track.duration_secs).sum::<f64>()
+            )
+            .into(),
+        );
     } else {
         args.extend(["-map", "[aout]"].map(OsString::from));
         args.extend(output_audio_args(options.audio_format));
@@ -298,7 +324,7 @@ fn write_cue(path: &Path, tracks: &[Track], output: &Path) -> anyhow::Result<()>
         "FILE \"{}\" WAVE\n",
         output.file_name().unwrap_or_default().to_string_lossy()
     );
-    let mut cursor = 0.0;
+    let mut cursor = 0.0_f64;
     for (index, track) in tracks.iter().enumerate() {
         let frames = (cursor * 75.0).round() as u64;
         let minutes = frames / (75 * 60);
@@ -328,7 +354,7 @@ pub fn spawn(
             Ok((output, warnings)) => {
                 let _ = tx.send(UiEvent::ExportFinished { output, warnings });
             }
-            Err(error) if cancel.is_cancelled() => {
+            Err(_error) if cancel.is_cancelled() => {
                 let _ = tx.send(UiEvent::ExportFailed("Export cancelled".into()));
             }
             Err(error) => {
@@ -345,7 +371,10 @@ fn run_export(
     cancel: &CancelToken,
     tx: &Sender<UiEvent>,
 ) -> anyhow::Result<(PathBuf, Vec<String>)> {
-    let final_output = options.output.as_ref().ok_or_else(|| anyhow!("Choose an output file"))?;
+    let final_output = options
+        .output
+        .as_ref()
+        .ok_or_else(|| anyhow!("Choose an output file"))?;
     if tracks.is_empty() {
         bail!("No audio selected");
     }
@@ -380,8 +409,14 @@ fn run_export(
         .spawn()
         .context("Could not start the bundled FFmpeg")?;
 
-    let stdout = child.stdout.take().ok_or_else(|| anyhow!("FFmpeg progress pipe was unavailable"))?;
-    let stderr = child.stderr.take().ok_or_else(|| anyhow!("FFmpeg error pipe was unavailable"))?;
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| anyhow!("FFmpeg progress pipe was unavailable"))?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| anyhow!("FFmpeg error pipe was unavailable"))?;
     let (progress_tx, progress_rx) = unbounded::<(Option<f64>, Option<String>)>();
     thread::spawn(move || {
         let mut current_time = None;
@@ -400,7 +435,9 @@ fn run_export(
     let error_log_writer = error_log.clone();
     thread::spawn(move || {
         let mut text = String::new();
-        let _ = BufReader::new(stderr).take(512 * 1024).read_to_string(&mut text);
+        let _ = BufReader::new(stderr)
+            .take(512 * 1024)
+            .read_to_string(&mut text);
         if let Ok(mut target) = error_log_writer.lock() {
             *target = text;
         }
@@ -421,9 +458,9 @@ fn run_export(
                 None
             };
             let elapsed = start.elapsed().as_secs_f64();
-            let eta = fraction.filter(|value| *value > 0.01).map(|value| {
-                (elapsed / value as f64 - elapsed).max(0.0)
-            });
+            let eta = fraction
+                .filter(|value| *value > 0.01)
+                .map(|value| (elapsed / value as f64 - elapsed).max(0.0));
             let active = tracks
                 .iter()
                 .scan(0.0, |cursor, track| {
@@ -439,9 +476,15 @@ fn run_export(
                     "Stitching {} of {}{}",
                     duration_label(encoded),
                     duration_label(total_duration),
-                    speed.as_deref().map(|value| format!(" at {value}")).unwrap_or_default()
+                    speed
+                        .as_deref()
+                        .map(|value| format!(" at {value}"))
+                        .unwrap_or_default()
                 ),
-                detail: tracks.get(active).map(|track| track.label().to_owned()).unwrap_or_default(),
+                detail: tracks
+                    .get(active)
+                    .map(|track| track.label().to_owned())
+                    .unwrap_or_default(),
                 elapsed_secs: elapsed,
                 eta_secs: eta,
                 speed,
@@ -491,15 +534,18 @@ fn run_export(
     }
     fs::rename(&partial, final_output)?;
     let mut warnings = Vec::new();
-    if options.kind == ExportKind::Audio && options.audio_format == AudioFormat::Flac {
-        if tracks.iter().any(|track| !track.lossless) {
-            warnings.push("Lossless output prevents further lossy compression, but cannot restore information already removed from the source.".into());
-        }
+    if options.kind == ExportKind::Audio
+        && options.audio_format == AudioFormat::Flac
+        && tracks.iter().any(|track| !track.lossless)
+    {
+        warnings.push("Lossless output prevents further lossy compression, but cannot restore information already removed from the source.".into());
     }
     if options.write_cue && options.kind == ExportKind::Audio {
         let cue = final_output.with_extension("cue");
         if let Err(error) = write_cue(&cue, tracks, final_output) {
-            warnings.push(format!("The audio was exported, but the CUE sheet failed: {error}"));
+            warnings.push(format!(
+                "The audio was exported, but the CUE sheet failed: {error}"
+            ));
         }
     }
     Ok((final_output.clone(), warnings))
@@ -528,6 +574,7 @@ pub fn compatible_video_codecs(container: VideoContainer) -> &'static [VideoAudi
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::media::probe;
 
     #[test]
     fn metadata_is_escaped() {
@@ -544,5 +591,102 @@ mod tests {
         let codecs = compatible_video_codecs(VideoContainer::Mp4);
         assert!(!codecs.contains(&VideoAudioCodec::Flac));
         assert!(!codecs.contains(&VideoAudioCodec::Opus));
+    }
+
+    #[test]
+    fn exports_two_flac_tracks_end_to_end() {
+        if Command::new(sidecar("ffmpeg"))
+            .arg("-version")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .is_err()
+        {
+            return;
+        }
+        let temp = tempfile::tempdir().unwrap();
+        let mut tracks = Vec::new();
+        for (index, frequency) in [440, 660].into_iter().enumerate() {
+            let path = temp.path().join(format!("{} tone.flac", index + 1));
+            let status = Command::new(sidecar("ffmpeg"))
+                .args(["-v", "error", "-y", "-f", "lavfi", "-i"])
+                .arg(format!("sine=frequency={frequency}:duration=0.25"))
+                .args(["-c:a", "flac"])
+                .arg(&path)
+                .status()
+                .unwrap();
+            assert!(status.success());
+            tracks.push(probe::probe_audio(&path, index).unwrap());
+        }
+        let output = temp.path().join("joined.flac");
+        let options = ExportOptions {
+            output: Some(output.clone()),
+            ..ExportOptions::default()
+        };
+        let (tx, _rx) = unbounded();
+        run_export(&tracks, None, &options, &CancelToken::default(), &tx).unwrap();
+        assert!(output.is_file());
+        let duration = probe::probe_duration(&output).unwrap();
+        assert!((duration - 0.5).abs() < 0.1, "duration was {duration}");
+    }
+
+    #[test]
+    fn exports_static_cover_mkv_end_to_end() {
+        if Command::new(sidecar("ffmpeg"))
+            .arg("-version")
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .is_err()
+        {
+            return;
+        }
+        let temp = tempfile::tempdir().unwrap();
+        let track_path = temp.path().join("01 tone.flac");
+        let status = Command::new(sidecar("ffmpeg"))
+            .args(["-v", "error", "-y", "-f", "lavfi", "-i"])
+            .arg("sine=frequency=440:duration=0.35")
+            .args(["-c:a", "flac"])
+            .arg(&track_path)
+            .status()
+            .unwrap();
+        assert!(status.success());
+        let tracks = vec![probe::probe_audio(&track_path, 0).unwrap()];
+
+        let cover = temp.path().join("odd cover.png");
+        image::RgbaImage::from_pixel(301, 303, image::Rgba([30, 30, 30, 255]))
+            .save(&cover)
+            .unwrap();
+        let output = temp.path().join("joined.mkv");
+        let options = ExportOptions {
+            kind: ExportKind::Video,
+            output: Some(output.clone()),
+            ..ExportOptions::default()
+        };
+        let (tx, _rx) = unbounded();
+        run_export(
+            &tracks,
+            Some(&cover),
+            &options,
+            &CancelToken::default(),
+            &tx,
+        )
+        .unwrap();
+        assert!(output.is_file());
+        let details = Command::new(sidecar("ffprobe"))
+            .args([
+                "-v",
+                "error",
+                "-show_entries",
+                "stream=codec_type,codec_name",
+                "-of",
+                "json",
+            ])
+            .arg(&output)
+            .output()
+            .unwrap();
+        let details = String::from_utf8_lossy(&details.stdout);
+        assert!(details.contains("h264"), "{details}");
+        assert!(details.contains("flac"), "{details}");
     }
 }

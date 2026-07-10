@@ -7,34 +7,96 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   test:
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
       - name: Install native dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            libudev-dev libgtk-3-dev libxkbcommon-dev libwayland-dev \
+            libudev-dev libgtk-3-dev libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev \
             pkg-config ffmpeg cdparanoia
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
         with:
+          toolchain: 1.97.0
           components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32
       - name: Formatting
         run: cargo fmt --all -- --check
       - name: Clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings
+        run: cargo clippy --locked --all-targets --all-features -- -D warnings
       - name: Tests
-        run: cargo test --all-features
-      - name: Upload lockfile
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: cargo-lock
-          path: Cargo.lock
-          if-no-files-found: ignore
+        run: cargo test --locked --all-features
 
+  appimage:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: test
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - name: Install build and smoke-test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libudev-dev libgtk-3-dev libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev \
+            pkg-config ffmpeg cdparanoia curl file xvfb xauth
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
+        with:
+          toolchain: 1.97.0
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32
+      - name: Build release binary
+        run: cargo build --locked --release
+      - name: Fetch linuxdeploy
+        run: |
+          curl -fL -o linuxdeploy-x86_64.AppImage \
+            https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          chmod +x linuxdeploy-x86_64.AppImage scripts/package-appimage.sh
+      - name: Package
+        run: scripts/package-appimage.sh "0.1.0-alpha.1"
+      - name: Inspect bundled tools
+        run: |
+          APPIMAGE_EXTRACT_AND_RUN=1 ./Suture-0.1.0-alpha.1-x86_64.AppImage --appimage-extract
+          test -x squashfs-root/usr/bin/suture
+          test -x squashfs-root/usr/lib/suture/ffmpeg
+          test -x squashfs-root/usr/lib/suture/ffprobe
+          test -x squashfs-root/usr/lib/suture/cdparanoia
+          squashfs-root/usr/lib/suture/ffmpeg -version
+          squashfs-root/usr/lib/suture/ffprobe -version
+          squashfs-root/usr/lib/suture/cdparanoia --version
+      - name: Headless launch smoke test
+        run: |
+          set +e
+          APPIMAGE_EXTRACT_AND_RUN=1 timeout 8s xvfb-run -a ./Suture-0.1.0-alpha.1-x86_64.AppImage
+          status=$?
+          set -e
+          if [[ "$status" -ne 0 && "$status" -ne 124 ]]; then
+            exit "$status"
+          fi
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: Suture-AppImage-x86_64
+          path: |
+            Suture-0.1.0-alpha.1-x86_64.AppImage
+            Suture-0.1.0-alpha.1-x86_64.AppImage.sha256
+      - name: Publish public alpha prerelease
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v0.1.0-alpha.1
+          name: Suture 0.1.0 alpha 1
+          prerelease: true
+          generate_release_notes: true
+          body: |
+            Early Linux x86_64 test build. Automated audio/video export and AppImage launch checks pass on Ubuntu 22.04.
+
+            Physical audio-CD hardware and the other listed Linux distributions still need manual testing. Please treat this as an alpha build.
+          files: |
+            Suture-0.1.0-alpha.1-x86_64.AppImage
+            Suture-0.1.0-alpha.1-x86_64.AppImage.sha256
+            LICENSE
+            THIRD_PARTY_NOTICES.md
+            CHANGELOG.md

@@ -269,6 +269,9 @@ pub enum UiEvent {
     CdImported(Vec<Track>),
     CdFailed(String),
     ExportProgress(ProgressInfo),
-    ExportFinished { output: PathBuf, warnings: Vec<String> },
+    ExportFinished {
+        output: PathBuf,
+        warnings: Vec<String>,
+    },
     ExportFailed(String),
 }

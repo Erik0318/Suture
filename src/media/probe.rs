@@ -99,8 +99,13 @@ pub fn probe_audio(path: &Path, original_index: usize) -> anyhow::Result<Track> 
         .iter()
         .find(|stream| stream.codec_type.as_deref() == Some("audio"))
         .ok_or_else(|| anyhow!("No audio stream"))?;
-    let format = data.format.ok_or_else(|| anyhow!("Missing container information"))?;
-    let codec = stream.codec_name.clone().unwrap_or_else(|| "unknown".into());
+    let format = data
+        .format
+        .ok_or_else(|| anyhow!("Missing container information"))?;
+    let codec = stream
+        .codec_name
+        .clone()
+        .unwrap_or_else(|| "unknown".into());
     let duration_secs = parse_f64(stream.duration.as_deref())
         .or_else(|| parse_f64(format.duration.as_deref()))
         .unwrap_or(0.0);
@@ -166,11 +171,12 @@ pub fn probe_duration(path: &Path) -> anyhow::Result<f64> {
         .arg(path)
         .output()?;
     if !output.status.success() {
-        return Err(anyhow!(String::from_utf8_lossy(&output.stderr).trim().to_owned()));
+        return Err(anyhow!(String::from_utf8_lossy(&output.stderr)
+            .trim()
+            .to_owned()));
     }
     String::from_utf8_lossy(&output.stdout)
         .trim()
         .parse()
         .context("ffprobe did not return a duration")
 }
-

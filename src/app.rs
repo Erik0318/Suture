@@ -12,7 +12,7 @@ use crate::{
     media::{cd, cover, export, scan, sort, tools},
     model::{
         duration_label, AudioFormat, CancelToken, CdDisc, CdDrive, CoverMode, ExportKind,
-        ExportOptions, ProgressInfo, Track, UiEvent, VideoAudioCodec, VideoContainer,
+        ExportOptions, ProgressInfo, Track, UiEvent, VideoContainer,
     },
     settings::Settings,
     ui,
@@ -100,7 +100,11 @@ impl SutureApp {
             .iter()
             .find(|path| path.is_dir())
             .cloned()
-            .or_else(|| inputs.first().and_then(|path| path.parent().map(Path::to_path_buf)))
+            .or_else(|| {
+                inputs
+                    .first()
+                    .and_then(|path| path.parent().map(Path::to_path_buf))
+            })
         {
             self.settings.last_input_folder = Some(folder);
         }
@@ -140,7 +144,10 @@ impl SutureApp {
         if dropped.is_empty() || self.busy {
             return;
         }
-        let paths = dropped.into_iter().filter_map(|file| file.path).collect::<Vec<_>>();
+        let paths = dropped
+            .into_iter()
+            .filter_map(|file| file.path)
+            .collect::<Vec<_>>();
         if let Some(image) = paths.iter().find(|path| cover::looks_like_image(path)) {
             self.set_cover(image.clone(), ctx);
         }
@@ -183,7 +190,8 @@ impl SutureApp {
                 }
                 UiEvent::DrivesChanged(drives) => {
                     self.drives = drives;
-                    self.selected_drive = self.selected_drive.min(self.drives.len().saturating_sub(1));
+                    self.selected_drive =
+                        self.selected_drive.min(self.drives.len().saturating_sub(1));
                     if let Some(drive) = self.drives.iter().find(|drive| drive.audio_media) {
                         if self.toc_requested.as_ref() != Some(&drive.device) && !self.busy {
                             self.toc_requested = Some(drive.device.clone());
@@ -236,7 +244,10 @@ impl SutureApp {
     fn choose_files(&mut self) {
         let mut dialog = rfd::FileDialog::new().add_filter(
             "Audio",
-            &["flac", "mp3", "wav", "aiff", "aif", "m4a", "aac", "ogg", "opus", "wma", "ape", "wv", "tta"],
+            &[
+                "flac", "mp3", "wav", "aiff", "aif", "m4a", "aac", "ogg", "opus", "wma", "ape",
+                "wv", "tta",
+            ],
         );
         if let Some(folder) = &self.settings.last_input_folder {
             dialog = dialog.set_directory(folder);
@@ -247,10 +258,7 @@ impl SutureApp {
     }
 
     fn choose_cover(&mut self, ctx: &egui::Context) {
-        if let Some(path) = rfd::FileDialog::new()
-            .add_filter("Images", &["jpg", "jpeg", "png", "webp", "bmp", "tif", "tiff", "gif"])
-            .pick_file()
-        {
+        if let Some(path) = rfd::FileDialog::new().pick_file() {
             self.set_cover(path, ctx);
         }
     }
@@ -273,7 +281,9 @@ impl SutureApp {
         if self.options.output.is_none() {
             self.choose_output();
         }
-        let Some(output) = self.options.output.as_ref() else { return };
+        let Some(output) = self.options.output.as_ref() else {
+            return;
+        };
         if output.exists() {
             self.confirm_overwrite = true;
         } else {
@@ -312,7 +322,9 @@ impl SutureApp {
     }
 
     fn import_cd(&mut self) {
-        let Some(disc) = self.disc.clone() else { return };
+        let Some(disc) = self.disc.clone() else {
+            return;
+        };
         if self.busy {
             return;
         }
@@ -373,7 +385,8 @@ impl SutureApp {
         if top {
             self.selected.extend(0..selected_len);
         } else {
-            self.selected.extend(self.tracks.len().saturating_sub(selected_len)..self.tracks.len());
+            self.selected
+                .extend(self.tracks.len().saturating_sub(selected_len)..self.tracks.len());
         }
     }
 
@@ -382,13 +395,51 @@ impl SutureApp {
             ui.heading("Suture");
             ui.label(RichText::new("stitch tracks into one continuous piece").weak());
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                if ui.add_enabled(!self.busy, egui::Button::new("Add cover")).clicked() {
+                ui.menu_button("Settings", |ui| {
+                    ui.checkbox(
+                        &mut self.settings.include_subfolders,
+                        "Include subfolders when scanning",
+                    );
+                    ui.checkbox(&mut self.settings.reduced_motion, "Reduce motion");
+                    ui.separator();
+                    ui.label("Theme");
+                    if ui
+                        .selectable_label(self.settings.dark_theme.is_none(), "System (on restart)")
+                        .clicked()
+                    {
+                        self.settings.dark_theme = None;
+                    }
+                    if ui
+                        .selectable_label(self.settings.dark_theme == Some(false), "Light")
+                        .clicked()
+                    {
+                        self.settings.dark_theme = Some(false);
+                        ctx.set_visuals(egui::Visuals::light());
+                    }
+                    if ui
+                        .selectable_label(self.settings.dark_theme == Some(true), "Dark")
+                        .clicked()
+                    {
+                        self.settings.dark_theme = Some(true);
+                        ctx.set_visuals(egui::Visuals::dark());
+                    }
+                });
+                if ui
+                    .add_enabled(!self.busy, egui::Button::new("Add cover"))
+                    .clicked()
+                {
                     self.choose_cover(ctx);
                 }
-                if ui.add_enabled(!self.busy, egui::Button::new("Add files")).clicked() {
+                if ui
+                    .add_enabled(!self.busy, egui::Button::new("Add files"))
+                    .clicked()
+                {
                     self.choose_files();
                 }
-                if ui.add_enabled(!self.busy, egui::Button::new("Select folder")).clicked() {
+                if ui
+                    .add_enabled(!self.busy, egui::Button::new("Select folder"))
+                    .clicked()
+                {
                     self.choose_folder();
                 }
             });
@@ -411,7 +462,11 @@ impl SutureApp {
                             }
                         });
                 } else {
-                    ui.label(format!("{} ({})", self.drives[0].name, self.drives[0].device.display()));
+                    ui.label(format!(
+                        "{} ({})",
+                        self.drives[0].name,
+                        self.drives[0].device.display()
+                    ));
                 }
                 if let Some(disc) = &self.disc {
                     ui.label(format!(
@@ -419,12 +474,18 @@ impl SutureApp {
                         disc.tracks.len(),
                         duration_label(disc.total_duration())
                     ));
-                    if ui.add_enabled(!self.busy, egui::Button::new("Import CD")).clicked() {
+                    if ui
+                        .add_enabled(!self.busy, egui::Button::new("Import CD"))
+                        .clicked()
+                    {
                         self.import_cd();
                     }
                 } else if !self.cd_reader_available {
                     ui.colored_label(Color32::YELLOW, "CD reader is unavailable in this build");
-                } else if ui.add_enabled(!self.busy, egui::Button::new("Check disc")).clicked() {
+                } else if ui
+                    .add_enabled(!self.busy, egui::Button::new("Check disc"))
+                    .clicked()
+                {
                     let drive = self.drives[self.selected_drive].clone();
                     self.toc_requested = Some(drive.device.clone());
                     cd::spawn_read_disc(drive, self.tx.clone());
@@ -452,10 +513,19 @@ impl SutureApp {
                 }
             });
             ui.horizontal(|ui| {
-                if ui.add_enabled(!self.busy, egui::Button::new("Replace")).clicked() {
+                if ui
+                    .add_enabled(!self.busy, egui::Button::new("Replace"))
+                    .clicked()
+                {
                     self.choose_cover(ctx);
                 }
-                if ui.add_enabled(!self.busy && self.cover_path.is_some(), egui::Button::new("Remove")).clicked() {
+                if ui
+                    .add_enabled(
+                        !self.busy && self.cover_path.is_some(),
+                        egui::Button::new("Remove"),
+                    )
+                    .clicked()
+                {
                     self.cover_path = None;
                     self.cover_texture = None;
                 }
@@ -467,31 +537,77 @@ impl SutureApp {
         let total: f64 = self.tracks.iter().map(|track| track.duration_secs).sum();
         ui.horizontal(|ui| {
             ui.label(RichText::new("Track order").strong());
-            ui.label(format!("{} tracks • {}", self.tracks.len(), duration_label(total)));
+            ui.label(format!(
+                "{} tracks • {}",
+                self.tracks.len(),
+                duration_label(total)
+            ));
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                if ui.add_enabled(!self.busy && !self.tracks.is_empty(), egui::Button::new("Restore automatic order")).clicked() {
+                if ui
+                    .add_enabled(
+                        !self.busy && !self.tracks.is_empty(),
+                        egui::Button::new("Restore automatic order"),
+                    )
+                    .clicked()
+                {
                     sort::sort_tracks(&mut self.tracks);
                     self.selected.clear();
                 }
             });
         });
         ui.horizontal(|ui| {
-            if ui.add_enabled(!self.busy && !self.selected.is_empty(), egui::Button::new("Top")).clicked() {
+            if ui
+                .add_enabled(
+                    !self.busy && !self.selected.is_empty(),
+                    egui::Button::new("Top"),
+                )
+                .clicked()
+            {
                 self.move_selected_to_edge(true);
             }
-            if ui.add_enabled(!self.busy && !self.selected.is_empty(), egui::Button::new("Up")).clicked() {
+            if ui
+                .add_enabled(
+                    !self.busy && !self.selected.is_empty(),
+                    egui::Button::new("Up"),
+                )
+                .clicked()
+            {
                 self.move_selected(-1);
             }
-            if ui.add_enabled(!self.busy && !self.selected.is_empty(), egui::Button::new("Down")).clicked() {
+            if ui
+                .add_enabled(
+                    !self.busy && !self.selected.is_empty(),
+                    egui::Button::new("Down"),
+                )
+                .clicked()
+            {
                 self.move_selected(1);
             }
-            if ui.add_enabled(!self.busy && !self.selected.is_empty(), egui::Button::new("Bottom")).clicked() {
+            if ui
+                .add_enabled(
+                    !self.busy && !self.selected.is_empty(),
+                    egui::Button::new("Bottom"),
+                )
+                .clicked()
+            {
                 self.move_selected_to_edge(false);
             }
-            if ui.add_enabled(!self.busy && !self.selected.is_empty(), egui::Button::new("Remove")).clicked() {
+            if ui
+                .add_enabled(
+                    !self.busy && !self.selected.is_empty(),
+                    egui::Button::new("Remove"),
+                )
+                .clicked()
+            {
                 self.remove_selected();
             }
-            if ui.add_enabled(!self.busy && !self.tracks.is_empty(), egui::Button::new("Clear")).clicked() {
+            if ui
+                .add_enabled(
+                    !self.busy && !self.tracks.is_empty(),
+                    egui::Button::new("Clear"),
+                )
+                .clicked()
+            {
                 self.tracks.clear();
                 self.selected.clear();
             }
@@ -501,54 +617,96 @@ impl SutureApp {
         if !pointer_down {
             self.dragging = None;
         }
-        egui::ScrollArea::vertical().max_height(310.0).show(ui, |ui| {
-            for index in 0..self.tracks.len() {
-                let track = &self.tracks[index];
-                let label = track.label().to_owned();
-                let duration = track.duration_label();
-                let codec = track.codec.clone();
-                let sample = track.sample_rate.map(|rate| format!("{} kHz", rate as f32 / 1000.0)).unwrap_or_else(|| "? kHz".into());
-                let quality = if track.lossless { "lossless" } else { "lossy" };
-                let row = ui.horizontal(|ui| {
-                    let handle = ui.add(egui::Label::new("⠿").sense(Sense::drag()));
-                    if handle.drag_started() {
-                        self.dragging = Some(index);
-                    }
-                    let selected = self.selected.contains(&index);
-                    if ui.selectable_label(selected, format!("{:02}", index + 1)).clicked() {
-                        if !ui.input(|input| input.modifiers.command || input.modifiers.shift) {
-                            self.selected.clear();
+        let mut remove_one = None;
+        egui::ScrollArea::vertical()
+            .max_height(310.0)
+            .show(ui, |ui| {
+                for index in 0..self.tracks.len() {
+                    let track = &self.tracks[index];
+                    let label = track.label().to_owned();
+                    let duration = track.duration_label();
+                    let codec = track.codec.clone();
+                    let sample = track
+                        .sample_rate
+                        .map(|rate| format!("{} kHz", rate as f32 / 1000.0))
+                        .unwrap_or_else(|| "? kHz".into());
+                    let quality = if track.lossless { "lossless" } else { "lossy" };
+                    let details = format!(
+                        "{}\n{} • {} ch • {}\n{}",
+                        track.path.display(),
+                        track.container,
+                        track.channels.unwrap_or(0),
+                        track
+                            .bit_depth
+                            .map(|bits| format!("{bits}-bit"))
+                            .unwrap_or_else(|| "unknown depth".into()),
+                        [track.artist.as_deref(), track.album.as_deref()]
+                            .into_iter()
+                            .flatten()
+                            .collect::<Vec<_>>()
+                            .join(" — ")
+                    );
+                    let row = ui
+                        .horizontal(|ui| {
+                            let handle = ui.add(egui::Label::new("⠿").sense(Sense::drag()));
+                            if handle.drag_started() {
+                                self.dragging = Some(index);
+                            }
+                            let selected = self.selected.contains(&index);
+                            if ui
+                                .selectable_label(selected, format!("{:02}", index + 1))
+                                .clicked()
+                            {
+                                if !ui
+                                    .input(|input| input.modifiers.command || input.modifiers.shift)
+                                {
+                                    self.selected.clear();
+                                }
+                                if !self.selected.insert(index) {
+                                    self.selected.remove(&index);
+                                }
+                            }
+                            ui.label(label);
+                            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                                if ui
+                                    .add_enabled(!self.busy, egui::Button::new("×").small())
+                                    .on_hover_text("Remove this track")
+                                    .clicked()
+                                {
+                                    remove_one = Some(index);
+                                }
+                                ui.label(quality);
+                                ui.label(sample);
+                                ui.label(codec);
+                                ui.label(duration);
+                            });
+                        })
+                        .response;
+                    let row = row.on_hover_text(details);
+                    if row.hovered() && pointer_down {
+                        if let Some(from) = self.dragging {
+                            if from != index {
+                                let track = self.tracks.remove(from);
+                                self.tracks.insert(index, track);
+                                self.dragging = Some(index);
+                                self.selected.clear();
+                                self.selected.insert(index);
+                            }
                         }
-                        if !self.selected.insert(index) {
-                            self.selected.remove(&index);
-                        }
                     }
-                    ui.label(label);
-                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        ui.label(quality);
-                        ui.label(sample);
-                        ui.label(codec);
-                        ui.label(duration);
-                    });
-                }).response;
-                if row.hovered() && pointer_down {
-                    if let Some(from) = self.dragging {
-                        if from != index {
-                            let track = self.tracks.remove(from);
-                            self.tracks.insert(index, track);
-                            self.dragging = Some(index);
-                            self.selected.clear();
-                            self.selected.insert(index);
-                        }
-                    }
+                    ui.separator();
                 }
-                ui.separator();
-            }
-            if self.tracks.is_empty() {
-                ui.add_space(40.0);
-                ui.centered_and_justified(|ui| ui.label("Add a folder, files, or an audio CD to begin"));
-            }
-        });
+                if self.tracks.is_empty() {
+                    ui.add_space(40.0);
+                    ui.centered_and_justified(|ui| {
+                        ui.label("Add a folder, files, or an audio CD to begin")
+                    });
+                }
+            });
+        if let Some(index) = remove_one {
+            self.tracks.remove(index);
+            self.selected.clear();
+        }
     }
 
     fn show_export_panel(&mut self, ui: &mut egui::Ui) {
@@ -562,16 +720,31 @@ impl SutureApp {
                     .selected_text(self.options.audio_format.label())
                     .show_ui(ui, |ui| {
                         for format in AudioFormat::ALL {
-                            ui.selectable_value(&mut self.options.audio_format, format, format.label());
+                            ui.selectable_value(
+                                &mut self.options.audio_format,
+                                format,
+                                format.label(),
+                            );
                         }
                     });
                 ui.checkbox(&mut self.options.write_cue, "Write CUE sheet");
             } else {
                 egui::ComboBox::from_id_salt("video-container")
-                    .selected_text(match self.options.video_container { VideoContainer::Mkv => "MKV", VideoContainer::Mp4 => "MP4" })
+                    .selected_text(match self.options.video_container {
+                        VideoContainer::Mkv => "MKV",
+                        VideoContainer::Mp4 => "MP4",
+                    })
                     .show_ui(ui, |ui| {
-                        ui.selectable_value(&mut self.options.video_container, VideoContainer::Mkv, "MKV");
-                        ui.selectable_value(&mut self.options.video_container, VideoContainer::Mp4, "MP4");
+                        ui.selectable_value(
+                            &mut self.options.video_container,
+                            VideoContainer::Mkv,
+                            "MKV",
+                        );
+                        ui.selectable_value(
+                            &mut self.options.video_container,
+                            VideoContainer::Mp4,
+                            "MP4",
+                        );
                     });
                 let allowed = export::compatible_video_codecs(self.options.video_container);
                 if !allowed.contains(&self.options.video_audio_codec) {
@@ -581,7 +754,11 @@ impl SutureApp {
                     .selected_text(format!("{:?}", self.options.video_audio_codec))
                     .show_ui(ui, |ui| {
                         for codec in allowed {
-                            ui.selectable_value(&mut self.options.video_audio_codec, *codec, format!("{codec:?}"));
+                            ui.selectable_value(
+                                &mut self.options.video_audio_codec,
+                                *codec,
+                                format!("{codec:?}"),
+                            );
                         }
                     });
                 egui::ComboBox::from_id_salt("cover-mode")
@@ -589,7 +766,11 @@ impl SutureApp {
                     .show_ui(ui, |ui| {
                         ui.selectable_value(&mut self.options.cover_mode, CoverMode::Fit, "Fit");
                         ui.selectable_value(&mut self.options.cover_mode, CoverMode::Fill, "Fill");
-                        ui.selectable_value(&mut self.options.cover_mode, CoverMode::Original, "Original");
+                        ui.selectable_value(
+                            &mut self.options.cover_mode,
+                            CoverMode::Original,
+                            "Original",
+                        );
                     });
                 egui::ComboBox::from_id_salt("fps")
                     .selected_text(format!("{} fps", self.options.fps))
@@ -600,18 +781,37 @@ impl SutureApp {
                     });
             }
         });
-        if self.options.kind == ExportKind::Audio && self.options.audio_format == AudioFormat::Flac && self.tracks.iter().any(|track| !track.lossless) {
+        if self.options.kind == ExportKind::Audio
+            && self.options.audio_format == AudioFormat::Flac
+            && self.tracks.iter().any(|track| !track.lossless)
+        {
             ui.colored_label(Color32::YELLOW, "Lossless output prevents further lossy compression, but cannot restore information already removed from the source.");
         }
         ui.horizontal(|ui| {
-            let output = self.options.output.as_ref().map(|path| path.display().to_string()).unwrap_or_else(|| "No output selected".into());
+            let output = self
+                .options
+                .output
+                .as_ref()
+                .map(|path| path.display().to_string())
+                .unwrap_or_else(|| "No output selected".into());
             ui.label(output);
-            if ui.add_enabled(!self.busy, egui::Button::new("Choose output")).clicked() {
+            if ui
+                .add_enabled(!self.busy, egui::Button::new("Choose output"))
+                .clicked()
+            {
                 self.choose_output();
             }
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                let can_export = !self.busy && !self.tracks.is_empty() && (self.options.kind == ExportKind::Audio || self.cover_path.is_some());
-                if ui.add_enabled(can_export, egui::Button::new(RichText::new("Export").strong())).clicked() {
+                let can_export = !self.busy
+                    && !self.tracks.is_empty()
+                    && (self.options.kind == ExportKind::Audio || self.cover_path.is_some());
+                if ui
+                    .add_enabled(
+                        can_export,
+                        egui::Button::new(RichText::new("Export").strong()),
+                    )
+                    .clicked()
+                {
                     self.request_export();
                 }
             });
@@ -620,15 +820,17 @@ impl SutureApp {
 
     fn show_notices(&mut self, ui: &mut egui::Ui) {
         if !self.warnings.is_empty() {
-            egui::CollapsingHeader::new(format!("Warnings ({})", self.warnings.len()))
-                .show(ui, |ui| {
+            egui::CollapsingHeader::new(format!("Warnings ({})", self.warnings.len())).show(
+                ui,
+                |ui| {
                     for warning in &self.warnings {
                         ui.colored_label(Color32::YELLOW, warning);
                     }
                     if ui.button("Dismiss warnings").clicked() {
                         self.warnings.clear();
                     }
-                });
+                },
+            );
         }
         if let Some(output) = self.completed_output.clone() {
             egui::Frame::group(ui.style()).show(ui, |ui| {
@@ -744,4 +946,3 @@ impl Drop for SutureApp {
         }
     }
 }
-

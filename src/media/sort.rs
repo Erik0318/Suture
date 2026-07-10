@@ -14,16 +14,15 @@ fn filename_number_key(path: &Path) -> Option<NumberKey> {
     let stem = path.file_stem()?.to_string_lossy();
     static DISC_TRACK: OnceLock<Regex> = OnceLock::new();
     static LEADING: OnceLock<Regex> = OnceLock::new();
-    let disc_track = DISC_TRACK
-        .get_or_init(|| Regex::new(r"^\s*(\d{1,3})[-.](\d{1,3})(?:\D|$)").unwrap());
+    let disc_track =
+        DISC_TRACK.get_or_init(|| Regex::new(r"^\s*(\d{1,3})[-.](\d{1,3})(?:\D|$)").unwrap());
     if let Some(captures) = disc_track.captures(&stem) {
         return Some(NumberKey {
             disc: captures[1].parse().ok()?,
             track: captures[2].parse().ok()?,
         });
     }
-    let leading = LEADING
-        .get_or_init(|| Regex::new(r"^\s*(\d{1,4})(?:\s|[-._]|$)").unwrap());
+    let leading = LEADING.get_or_init(|| Regex::new(r"^\s*(\d{1,4})(?:\s|[-._]|$)").unwrap());
     leading.captures(&stem).map(|captures| NumberKey {
         disc: 0,
         track: captures[1].parse().unwrap_or(u32::MAX),
