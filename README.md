@@ -40,7 +40,7 @@ The shipped application uses a bundled cdparanoia sidecar controlled directly fr
 
 ## Development
 
-Suture uses Rust stable, egui/eframe, FFmpeg/ffprobe sidecars, libudev, and cdparanoia. Fedora setup, test commands, and packaging details are in [docs/BUILDING.md](docs/BUILDING.md). The architecture is documented in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Suture uses Rust stable, egui/eframe, FFmpeg/ffprobe sidecars, libudev, and cdparanoia. Fedora setup, test commands, and packaging details are in [docs/BUILDING.md](docs/BUILDING.md). The architecture is documented in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), and verified platform status is tracked in [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md).
 
 ```bash
 cargo run
@@ -55,4 +55,3 @@ CI checks formatting, Clippy, and tests. Version tags trigger the Ubuntu 22.04 A
 ## License
 
 Suture is available under the [MIT License](LICENSE). Bundled media tools keep their own licenses; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
-

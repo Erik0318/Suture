@@ -40,3 +40,4 @@ jobs:
             Suture-*.AppImage.sha256
             LICENSE
             THIRD_PARTY_NOTICES.md
+            CHANGELOG.md

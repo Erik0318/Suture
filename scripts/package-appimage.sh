@@ -15,7 +15,7 @@ APPIMAGE_EXTRACT_AND_RUN=1 "$linuxdeploy" \
   --executable "$(command -v ffprobe)" \
   --executable "$(command -v cdparanoia)" \
   --desktop-file packaging/io.github.erik0318.Suture.desktop \
-  --icon-file assets/suture.svg
+  --icon-file assets/io.github.erik0318.Suture.svg
 
 for tool in ffmpeg ffprobe cdparanoia; do
   if [[ -x "$appdir/usr/bin/$tool" ]]; then
@@ -30,4 +30,3 @@ cp /usr/share/doc/cdparanoia/copyright "$appdir/usr/share/doc/suture/CDPARANOIA_
 export OUTPUT="Suture-${version}-x86_64.AppImage"
 APPIMAGE_EXTRACT_AND_RUN=1 "$linuxdeploy" --appdir "$appdir" --output appimage
 sha256sum "$OUTPUT" > "$OUTPUT.sha256"
-
