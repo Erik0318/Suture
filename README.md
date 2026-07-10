@@ -1,48 +1,58 @@
 # Suture
 
-Suture stitches an ordered set of tracks into one continuous audio file or a static-cover video. It is a lightweight, local-first desktop app built for albums, live recordings, mixes, and audio CDs.
+Suture stitches ordered tracks into one continuous audio file or a static-cover video. It is a local-first native desktop app for albums, mixes, live recordings, and audio CDs.
 
-> Suture is currently in early development. There is no official AppImage yet.
+> The first public AppImage is still under validation. Do not treat the current `main` branch as a finished release.
 
 ## Download
 
-When the first stable build is ready, download the x86_64 AppImage from [GitHub Releases](https://github.com/Erik0318/Suture/releases). Release builds will include a SHA-256 checksum and will not require a separate FFmpeg installation.
+Verified builds will appear on [GitHub Releases](https://github.com/Erik0318/Suture/releases) as `Suture-<version>-x86_64.AppImage` with a SHA-256 checksum.
 
-## Planned Linux MVP
+```bash
+chmod +x Suture-*-x86_64.AppImage
+./Suture-*-x86_64.AppImage
+```
 
-- Add individual audio files, a folder, or drag files into the window
-- Detect an inserted audio CD automatically and import its tracks without browsing to a device path
-- Detect formats with ffprobe and order tracks from filenames and metadata
-- Reorder or remove tracks manually
-- Detect or select album artwork
-- Export continuous audio in lossless or lossy formats
-- Export MKV or MP4 video with a static cover and chapter markers
-- Show honest percentage progress, speed, elapsed time, and ETA
-- Use Suture's track-thread progress view during scanning, CD import, and export
-- Cancel safely without leaving a fake-complete output file
-- Keep media local
+The AppImage bundles FFmpeg, ffprobe, and the audio-CD reader.
 
-## CD support
+## Implemented on `main`
 
-On Linux, Suture will monitor optical-drive events through udev, verify the audio-CD table of contents, and rip through a bundled cdparanoia/libcdio-based sidecar. The user will not need to install abcde, cdparanoia, FFmpeg, or ffprobe.
+- Add a folder, individual audio files, or dropped files
+- Probe media off the UI thread with at most four ffprobe workers
+- Natural filename, disc/track metadata, and manual ordering
+- Cover discovery, embedded-art extraction, validation, preview, replacement, and removal
+- FLAC, WAV, ALAC, MP3, AAC, Opus, MKA, MKV, and MP4 choices
+- Compatible video codec/container choices only
+- Static-cover H.264 video with Fit, Fill, or Original sizing
+- Chapter metadata and optional CUE sheets
+- Real FFmpeg percentage, speed, elapsed time, ETA, cancellation, and output validation
+- Suture's track-thread waiting visualization with reduced-motion behavior
+- Linux optical-drive discovery through libudev
+- Audio-CD table-of-contents reading and sector-based cdparanoia import progress
+- Safe temporary filenames and final-name replacement only after validation
+- Settings persistence and readable warning/error surfaces
 
-Suture will never rip or eject a disc automatically. If several drives are connected, the user can choose one. CD-TEXT will be read locally when available, with numbered track names as the offline fallback.
+## CD workflow
 
-## Technology
+Suture notices optical drives automatically. When an audio disc is inserted, it reads the table of contents and shows the track count and duration. Import begins only after the user clicks **Import CD**. The tracks enter the same reorder/export workflow as local audio.
 
-- Rust stable
-- egui + eframe
-- Bundled FFmpeg and ffprobe
-- Bundled audio-CD reader
-- AppImage for the first Linux release
-- GitHub Actions for tests and reproducible release builds
+The shipped application uses a bundled cdparanoia sidecar controlled directly from Rust. It does not depend on abcde or a system FFmpeg installation.
 
-The complete implementation requirements live in [docs/PROJECT_SPEC.md](docs/PROJECT_SPEC.md).
+## Development
 
-## Target platforms
+Suture uses Rust stable, egui/eframe, FFmpeg/ffprobe sidecars, libudev, and cdparanoia. Fedora setup, test commands, and packaging details are in [docs/BUILDING.md](docs/BUILDING.md). The architecture is documented in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-The first artifact will be `Suture-<version>-x86_64.AppImage`. Windows, macOS, Flatpak, DEB, RPM, Snap, and ARM64 packaging can follow after the Linux MVP is stable.
+```bash
+cargo run
+```
+
+The full acceptance specification is in [docs/PROJECT_SPEC.md](docs/PROJECT_SPEC.md).
+
+## Release status
+
+CI checks formatting, Clippy, and tests. Version tags trigger the Ubuntu 22.04 AppImage build and create a GitHub Release only when tests and packaging succeed. Real optical-drive tests and multi-distribution launch tests must be recorded before `v0.1.0` is called stable.
 
 ## License
 
-The Suture source code is available under the [MIT License](LICENSE). Bundled media tools retain their respective licenses and will be documented in the release notices.
+Suture is available under the [MIT License](LICENSE). Bundled media tools keep their own licenses; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+

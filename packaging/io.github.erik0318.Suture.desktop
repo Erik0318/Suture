@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Suture
+Comment=Stitch audio tracks into one continuous piece
+Exec=suture
+Icon=io.github.erik0318.Suture
+Categories=AudioVideo;Audio;AudioVideoEditing;
+Terminal=false
+StartupNotify=true
+MimeType=audio/flac;audio/mpeg;audio/x-wav;audio/ogg;audio/mp4;
+
