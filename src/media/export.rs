@@ -298,7 +298,7 @@ fn write_cue(path: &Path, tracks: &[Track], output: &Path) -> anyhow::Result<()>
         "FILE \"{}\" WAVE\n",
         output.file_name().unwrap_or_default().to_string_lossy()
     );
-    let mut cursor = 0.0;
+    let mut cursor = 0.0_f64;
     for (index, track) in tracks.iter().enumerate() {
         let frames = (cursor * 75.0).round() as u64;
         let minutes = frames / (75 * 60);
@@ -328,7 +328,7 @@ pub fn spawn(
             Ok((output, warnings)) => {
                 let _ = tx.send(UiEvent::ExportFinished { output, warnings });
             }
-            Err(error) if cancel.is_cancelled() => {
+            Err(_error) if cancel.is_cancelled() => {
                 let _ = tx.send(UiEvent::ExportFailed("Export cancelled".into()));
             }
             Err(error) => {

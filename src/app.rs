@@ -12,7 +12,7 @@ use crate::{
     media::{cd, cover, export, scan, sort, tools},
     model::{
         duration_label, AudioFormat, CancelToken, CdDisc, CdDrive, CoverMode, ExportKind,
-        ExportOptions, ProgressInfo, Track, UiEvent, VideoAudioCodec, VideoContainer,
+        ExportOptions, ProgressInfo, Track, UiEvent, VideoContainer,
     },
     settings::Settings,
     ui,
@@ -744,4 +744,3 @@ impl Drop for SutureApp {
         }
     }
 }
-

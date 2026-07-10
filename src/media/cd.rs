@@ -6,7 +6,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use anyhow::{anyhow, bail, Context};
+use anyhow::{bail, Context};
 use crossbeam_channel::Sender;
 use regex::Regex;
 

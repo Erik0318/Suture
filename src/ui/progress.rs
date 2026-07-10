@@ -28,11 +28,11 @@ pub fn show(ui: &mut Ui, progress: &ProgressInfo, reduced_motion: bool) {
     let inactive = ui.visuals().widgets.inactive.fg_stroke.color;
     painter.line_segment(
         [egui::pos2(left, y), egui::pos2(right, y)],
-        Stroke::new(2.0, inactive.gamma_multiply(0.45)),
+        Stroke::new(2.0_f32, inactive.gamma_multiply(0.45)),
     );
     painter.line_segment(
         [egui::pos2(left, y), egui::pos2(left + (right - left) * fraction, y)],
-        Stroke::new(3.0, accent),
+        Stroke::new(3.0_f32, accent),
     );
 
     let nodes = progress.track_count.clamp(1, 24);
@@ -45,20 +45,28 @@ pub fn show(ui: &mut Ui, progress: &ProgressInfo, reduced_motion: bool) {
         let is_active = represented_track == active;
         let pulse = if is_active && !reduced_motion {
             let time = ui.input(|input| input.time);
-            1.5 + ((time * 4.0).sin() as f32 + 1.0)
+            1.5_f32 + ((time * 4.0).sin() as f32 + 1.0_f32)
         } else {
-            1.5
+            1.5_f32
         };
         if completed {
-            painter.circle_filled(egui::pos2(x, y), 4.0 + pulse, accent);
+            painter.circle_filled(egui::pos2(x, y), 4.0_f32 + pulse, accent);
         } else {
-            painter.circle_stroke(egui::pos2(x, y), 5.0, Stroke::new(1.5, inactive));
+            painter.circle_stroke(
+                egui::pos2(x, y),
+                5.0_f32,
+                Stroke::new(1.5_f32, inactive),
+            );
         }
     }
     if progress.fraction.is_none() && !reduced_motion {
         let time = ui.input(|input| input.time) as f32;
         let t = (time * 0.35).fract();
-        painter.circle_filled(egui::pos2(egui::lerp(left..=right, t), y), 4.5, accent);
+        painter.circle_filled(
+            egui::pos2(egui::lerp(left..=right, t), y),
+            4.5_f32,
+            accent,
+        );
     }
 
     ui.horizontal_wrapped(|ui| {
@@ -79,4 +87,3 @@ pub fn show(ui: &mut Ui, progress: &ProgressInfo, reduced_motion: bool) {
 fn _color_for_docs() -> Color32 {
     Color32::TRANSPARENT
 }
-
