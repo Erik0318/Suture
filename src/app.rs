@@ -494,9 +494,7 @@ impl SutureApp {
                         .audio_tracks
                         .map(|count| format!("{count} audio tracks detected • "))
                         .unwrap_or_default();
-                    ui.label(format!(
-                        "{detected_tracks}{stage}… {elapsed:.0}s"
-                    ));
+                    ui.label(format!("{detected_tracks}{stage}… {elapsed:.0}s"));
                     ui.label(
                         RichText::new(
                             "The drive is responding; older or damaged discs can take longer.",
