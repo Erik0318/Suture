@@ -534,11 +534,11 @@ impl SutureApp {
             let width = ui.available_width().clamp(180.0, 280.0);
             let size = egui::vec2(width, (width * 0.9).clamp(160.0, 250.0));
             let cover_hovered = ctx.input(|input| {
-                input.raw.hovered_files.iter().any(|file| {
-                    file.path
-                        .as_deref()
-                        .is_some_and(cover::looks_like_image)
-                })
+                input
+                    .raw
+                    .hovered_files
+                    .iter()
+                    .any(|file| file.path.as_deref().is_some_and(cover::looks_like_image))
             });
             let mut frame = egui::Frame::group(ui.style());
             if cover_hovered {
