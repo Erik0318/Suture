@@ -4,7 +4,10 @@ $Version = if ($args.Count -gt 0) { $args[0] } else { "1.0.0" }
 $Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $Dist = Join-Path $Root "dist-windows"
 $App = Join-Path $Dist "app"
-$UcrtBin = "C:\msys64\ucrt64\bin"
+$UcrtBin = $env:SUTURE_UCRT_BIN
+if ([string]::IsNullOrWhiteSpace($UcrtBin) -or -not (Test-Path $UcrtBin)) {
+    throw "SUTURE_UCRT_BIN does not point to the installed MSYS2 UCRT64 tools"
+}
 
 Remove-Item $Dist -Recurse -Force -ErrorAction SilentlyContinue
 New-Item $App -ItemType Directory -Force | Out-Null

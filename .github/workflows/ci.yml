@@ -119,6 +119,9 @@ jobs:
         run: cargo test --locked --all-features
       - name: Build release binary
         run: cargo build --locked --release
+      - name: Locate bundled Windows tools
+        shell: msys2 {0}
+        run: echo "SUTURE_UCRT_BIN=$(cygpath -w /ucrt64/bin)" >> "$GITHUB_ENV"
       - name: Download certificate authorities
         shell: pwsh
         run: |
