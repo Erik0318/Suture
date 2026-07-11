@@ -147,8 +147,12 @@ jobs:
       - name: Packaged application self-test
         shell: pwsh
         run: |
-          & "dist-windows/app/Suture.exe" --self-test
-          if ($LASTEXITCODE -ne 0) { throw "Packaged Suture self-test failed with $LASTEXITCODE" }
+          # PowerShell does not wait for Windows-subsystem GUI executables when
+          # invoked with `&`, so $LASTEXITCODE is unset even after a clean exit.
+          $process = Start-Process -FilePath "dist-windows/app/Suture.exe" -ArgumentList "--self-test" -Wait -PassThru -NoNewWindow
+          if ($process.ExitCode -ne 0) {
+            throw "Packaged Suture self-test failed with $($process.ExitCode)"
+          }
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: Suture1.0.0-Windows
