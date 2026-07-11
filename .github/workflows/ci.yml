@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: write
+  statuses: write
 
 jobs:
   test:
@@ -127,3 +128,8 @@ jobs:
           remaining="$(gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
             --jq 'map(select(.tag_name != "v1.0.0")) | length')"
           test "$remaining" -eq 0
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+            -f state=success \
+            -f context='suture/release-invariant' \
+            -f description='Only v1.0.0 with Suture1.0.0.AppImage remains' \
+            >/dev/null
