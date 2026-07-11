@@ -117,5 +117,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release delete v0.1.0-alpha.1 --yes || true
-          gh release delete v0.1.0-alpha.2 --yes || true
+          gh release view v1.0.0 --json assets --jq '.assets[].name' \
+            | grep -Fx 'Suture1.0.0.AppImage'
+          for tag in v0.1.0-alpha.1 v0.1.0-alpha.2; do
+            if gh release view "$tag" >/dev/null 2>&1; then
+              gh release delete "$tag" --yes
+            fi
+          done
+          remaining="$(gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+            --jq 'map(select(.tag_name != "v1.0.0")) | length')"
+          test "$remaining" -eq 0
