@@ -10,6 +10,8 @@ All notable changes to Suture are documented here.
 - Added overwrite refusal and cleanup for interrupted separate-track CD exports
 - Added optional UTF-8 timestamp sidecars with cumulative starts and Unicode track names
 - Added resilient MusicBrainz disc lookup using both disc ID and the full track map, including fuzzy matches, visible failures, and retry
+- Added self-contained Windows x86_64 and Apple Silicon macOS applications with the same file, folder, export, timestamp, and audio-CD workflows
+- Replaced the Linux-only libdiscid dependency with a tested cross-platform Rust disc-ID calculation
 - Standardized the Linux release asset as `Suture1.0.0.AppImage`
 
 ## 0.1.0-alpha.2 — 2026-07-10

@@ -4,14 +4,20 @@ Suture stitches ordered tracks into one continuous audio file or a static-cover 
 
 ## Download
 
-Download `Suture1.0.0.AppImage` and its SHA-256 checksum from [GitHub Releases](https://github.com/Erik0318/Suture/releases).
+Download the package for your computer from [GitHub Releases](https://github.com/Erik0318/Suture/releases):
+
+- Linux x86_64: `Suture1.0.0.AppImage`
+- Windows x86_64: `Suture1.0.0-Windows-x86_64-Setup.exe`
+- macOS Apple Silicon: `Suture1.0.0-macOS-arm64.dmg`
+
+Every package includes its media and audio-CD tools; users do not need to install FFmpeg, curl, libcdio-paranoia, or abcde.
 
 ```bash
 chmod +x Suture1.0.0.AppImage
 ./Suture1.0.0.AppImage
 ```
 
-The AppImage bundles FFmpeg, ffprobe, and the audio-CD reader.
+Windows and macOS may show a first-launch security confirmation because those new packages are not yet signed with commercial platform certificates.
 
 ## Implemented on `main`
 
@@ -25,8 +31,8 @@ The AppImage bundles FFmpeg, ffprobe, and the audio-CD reader.
 - Chapter metadata and optional CUE sheets
 - Real FFmpeg percentage, speed, elapsed time, ETA, cancellation, and output validation
 - Suture's track-thread waiting visualization with reduced-motion behavior
-- Linux optical-drive discovery through libudev
-- Audio-CD table-of-contents reading and sector-based cdparanoia import progress
+- Native Linux, Windows, and macOS optical-drive discovery
+- Cross-platform audio-CD table-of-contents reading and sector-based libcdio-paranoia import progress
 - CD-only export of verified, separate PCM WAV tracks into a chosen folder
 - Optional UTF-8 timestamp lists using cumulative track starts and titles
 - Safe temporary filenames and final-name replacement only after validation
@@ -34,13 +40,13 @@ The AppImage bundles FFmpeg, ffprobe, and the audio-CD reader.
 
 ## CD workflow
 
-Suture notices optical drives automatically. When an audio disc is inserted, it reads the table of contents and shows the track count and duration. It calculates the disc ID with libdiscid and performs one MusicBrainz lookup for real track names; unknown discs and offline sessions retain numbered fallback names. **Import CD** adds the tracks to the same reorder/export workflow as local audio. **Export separate WAV tracks** appears only for a recognized audio CD and saves one verified track per file into a chosen folder without overwriting existing files.
+Suture notices optical drives automatically through libudev on Linux, Windows optical-drive information, or macOS `drutil`. When an audio disc is inserted, it reads the table of contents and shows the track count and duration. It calculates the MusicBrainz disc ID directly and performs a TOC-aware lookup for real track names; unknown discs and offline sessions retain numbered fallback names. **Import CD** adds the tracks to the same reorder/export workflow as local audio. **Export separate WAV tracks** appears only for a recognized audio CD and saves one verified track per file into a chosen folder without overwriting existing files.
 
-The shipped application uses a bundled cdparanoia sidecar controlled directly from Rust. It does not depend on abcde or a system FFmpeg installation.
+The shipped applications use a bundled cdparanoia/libcdio-paranoia sidecar controlled directly from Rust. They do not depend on abcde or a system FFmpeg installation.
 
 ## Development
 
-Suture uses Rust stable, egui/eframe, FFmpeg/ffprobe sidecars, libudev, and cdparanoia. Fedora setup, test commands, and packaging details are in [docs/BUILDING.md](docs/BUILDING.md). The architecture is documented in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), and verified platform status is tracked in [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md).
+Suture uses Rust stable, egui/eframe, FFmpeg/ffprobe sidecars, platform optical-drive discovery, and libcdio-paranoia. Build and packaging details are in [docs/BUILDING.md](docs/BUILDING.md). The architecture is documented in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), and verified platform status is tracked in [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md).
 
 ```bash
 cargo run
@@ -50,7 +56,7 @@ The full acceptance specification is in [docs/PROJECT_SPEC.md](docs/PROJECT_SPEC
 
 ## Release status
 
-CI checks formatting, strict Clippy, tests, bundled media tools, and a headless AppImage launch before publishing `Suture1.0.0.AppImage`.
+CI checks formatting, strict Clippy, tests, bundled media tools, and native launch smoke tests before publishing the Linux, Windows, and macOS packages together.
 
 ## License
 
