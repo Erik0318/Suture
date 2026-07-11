@@ -112,3 +112,10 @@ jobs:
             LICENSE
             THIRD_PARTY_NOTICES.md
             CHANGELOG.md
+      - name: Remove superseded alpha releases
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete v0.1.0-alpha.1 --yes || true
+          gh release delete v0.1.0-alpha.2 --yes || true
