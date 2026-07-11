@@ -25,6 +25,6 @@ cargo clippy --all-targets --all-features -- -D warnings
 cargo test --all-features
 ```
 
-## AppImage
+## Release packages
 
-Release CI builds on Ubuntu 22.04, stages the Rust executable and media sidecars with linuxdeploy, and creates `Suture1.0.0.AppImage` plus its SHA-256 checksum. The `v1.0.0` release is published only after the CI job succeeds.
+Release CI builds on Ubuntu 22.04, Windows Server 2022, and Apple Silicon macOS. It creates an AppImage, a per-user Windows installer, and a macOS DMG, each with its SHA-256 checksum. The `v1.0.0` release is replaced only after all native tests, sidecar checks, packaging checks, and launch smoke tests succeed.

@@ -1,7 +1,5 @@
 use std::{
-    ffi::CStr,
     fs, io,
-    os::raw::{c_char, c_int},
     path::{Path, PathBuf},
     process::{Command, Stdio},
     thread,
@@ -9,9 +7,11 @@ use std::{
 };
 
 use anyhow::{bail, Context};
+use base64::{engine::general_purpose::STANDARD, Engine};
 use crossbeam_channel::Sender;
 use regex::Regex;
 use serde::Deserialize;
+use sha1::{Digest, Sha1};
 
 use crate::model::{
     CancelToken, CdDisc, CdDrive, CdTocTrack, ProgressInfo, TrackSource, UiEvent, WorkPhase,
@@ -55,8 +55,103 @@ pub fn enumerate_drives() -> anyhow::Result<Vec<CdDrive>> {
 }
 
 #[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
 pub fn enumerate_drives() -> anyhow::Result<Vec<CdDrive>> {
     Ok(Vec::new())
+}
+
+#[cfg(any(target_os = "windows", test))]
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+struct WindowsCdDrive {
+    drive: Option<String>,
+    name: Option<String>,
+    media_loaded: Option<bool>,
+}
+
+#[cfg(any(target_os = "windows", test))]
+fn parse_windows_drives(json: &str) -> anyhow::Result<Vec<CdDrive>> {
+    let drives: Vec<WindowsCdDrive> = serde_json::from_str(json)?;
+    Ok(drives
+        .into_iter()
+        .filter_map(|drive| {
+            let device = drive.drive?;
+            Some(CdDrive {
+                device: PathBuf::from(device),
+                name: drive.name.unwrap_or_else(|| "Optical drive".into()),
+                audio_media: drive.media_loaded.unwrap_or(false),
+                audio_tracks: None,
+            })
+        })
+        .collect())
+}
+
+#[cfg(target_os = "windows")]
+pub fn enumerate_drives() -> anyhow::Result<Vec<CdDrive>> {
+    let output = Command::new("powershell.exe")
+        .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            "$d=@(Get-CimInstance Win32_CDROMDrive | Select-Object Drive,Name,MediaLoaded); ConvertTo-Json -Compress -InputObject $d",
+        ])
+        .output()
+        .context("Could not ask Windows for its optical drives")?;
+    if !output.status.success() {
+        bail!(
+            "Windows optical-drive detection failed: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
+    parse_windows_drives(&String::from_utf8_lossy(&output.stdout))
+}
+
+#[cfg(any(target_os = "macos", test))]
+fn parse_macos_drive_status(status: &str) -> Vec<CdDrive> {
+    let lower = status.to_ascii_lowercase();
+    if lower.contains("no optical drive") || lower.contains("not found") {
+        return Vec::new();
+    }
+    vec![CdDrive {
+        device: PathBuf::from("default"),
+        name: "Default optical drive".into(),
+        audio_media: lower.contains("type: audio") || lower.contains("audio cd"),
+        audio_tracks: None,
+    }]
+}
+
+#[cfg(target_os = "macos")]
+pub fn enumerate_drives() -> anyhow::Result<Vec<CdDrive>> {
+    let output = Command::new("drutil")
+        .arg("status")
+        .output()
+        .context("Could not ask macOS for its optical drive")?;
+    let status = format!(
+        "{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    if !output.status.success() && status.to_ascii_lowercase().contains("no optical drive") {
+        return Ok(Vec::new());
+    }
+    Ok(parse_macos_drive_status(&status))
+}
+
+fn cd_reader_path() -> PathBuf {
+    let portable = sidecar("cd-paranoia");
+    if portable.is_file() {
+        portable
+    } else {
+        sidecar("cdparanoia")
+    }
+}
+
+fn cd_reader_command(device: &Path) -> Command {
+    let mut command = Command::new(cd_reader_path());
+    if device != Path::new("default") {
+        command.arg("-d").arg(device);
+    }
+    command
 }
 
 pub fn spawn_drive_monitor(tx: Sender<UiEvent>) {
@@ -107,9 +202,7 @@ pub fn spawn_lookup_titles(disc: CdDisc, tx: Sender<UiEvent>) {
 }
 
 pub fn read_toc(drive: &CdDrive) -> anyhow::Result<CdDisc> {
-    let output = Command::new(sidecar("cdparanoia"))
-        .arg("-d")
-        .arg(&drive.device)
+    let output = cd_reader_command(&drive.device)
         .arg("-Q")
         .output()
         .with_context(|| "Could not start the bundled audio-CD reader")?;
@@ -227,44 +320,7 @@ fn parse_musicbrainz_titles(
         .collect()
 }
 
-#[cfg(target_os = "linux")]
-#[repr(C)]
-struct DiscIdHandle {
-    _private: [u8; 0],
-}
-
-#[cfg(target_os = "linux")]
-#[link(name = "discid")]
-unsafe extern "C" {
-    fn discid_new() -> *mut DiscIdHandle;
-    fn discid_free(disc: *mut DiscIdHandle);
-    fn discid_put(
-        disc: *mut DiscIdHandle,
-        first: c_int,
-        last: c_int,
-        offsets: *const c_int,
-    ) -> c_int;
-    fn discid_get_id(disc: *mut DiscIdHandle) -> *mut c_char;
-    fn discid_get_toc_string(disc: *mut DiscIdHandle) -> *mut c_char;
-}
-
-#[cfg(target_os = "linux")]
-struct OwnedDiscId(*mut DiscIdHandle);
-
-#[cfg(target_os = "linux")]
-impl Drop for OwnedDiscId {
-    fn drop(&mut self) {
-        unsafe { discid_free(self.0) };
-    }
-}
-
-#[cfg(target_os = "linux")]
 fn musicbrainz_disc_identity(cd: &CdDisc) -> anyhow::Result<(String, String)> {
-    let disc = unsafe { discid_new() };
-    if disc.is_null() {
-        bail!("Could not allocate a MusicBrainz disc reader");
-    }
-    let disc = OwnedDiscId(disc);
     let first = cd
         .tracks
         .first()
@@ -273,58 +329,46 @@ fn musicbrainz_disc_identity(cd: &CdDisc) -> anyhow::Result<(String, String)> {
         .tracks
         .last()
         .with_context(|| "Cannot identify an empty audio CD")?;
-    let mut offsets = [0_i32; 100];
-    offsets[0] = i32::try_from(last.first_sector + last.sectors + 150)?;
+    let mut offsets = [0_u64; 100];
+    offsets[0] = last.first_sector + last.sectors + 150;
     for track in &cd.tracks {
         let index = usize::try_from(track.number)?;
         if index >= offsets.len() {
             bail!("Audio CD track number {} is out of range", track.number);
         }
-        offsets[index] = i32::try_from(track.first_sector + 150)?;
+        offsets[index] = track.first_sector + 150;
     }
-    if unsafe {
-        discid_put(
-            disc.0,
-            c_int::try_from(first.number)?,
-            c_int::try_from(last.number)?,
-            offsets.as_ptr(),
-        )
-    } == 0
-    {
-        bail!("Could not calculate the MusicBrainz disc ID from the disc table of contents");
+    let mut input = format!("{:02X}{:02X}", first.number, last.number);
+    for offset in offsets {
+        input.push_str(&format!("{offset:08X}"));
     }
-    let id = unsafe { discid_get_id(disc.0) };
-    if id.is_null() {
-        bail!("libdiscid did not return a MusicBrainz disc ID");
-    }
-    let toc = unsafe { discid_get_toc_string(disc.0) };
-    if toc.is_null() {
-        bail!("libdiscid did not return the audio CD table of contents");
-    }
-    let id = unsafe { CStr::from_ptr(id) }.to_string_lossy().into_owned();
-    let toc = unsafe { CStr::from_ptr(toc) }
-        .to_string_lossy()
-        .into_owned();
-    if id.trim().is_empty() || toc.trim().is_empty() {
-        bail!("libdiscid returned incomplete audio CD identification data");
-    }
+    let digest = Sha1::digest(input.as_bytes());
+    let id = STANDARD
+        .encode(digest)
+        .replace('+', ".")
+        .replace('/', "_")
+        .replace('=', "-");
+    let toc = (first.number..=last.number).fold(
+        format!("{} {} {}", first.number, last.number, offsets[0]),
+        |mut toc, number| {
+            toc.push_str(&format!(" {}", offsets[number as usize]));
+            toc
+        },
+    );
     Ok((id, toc))
 }
 
-#[cfg(not(target_os = "linux"))]
-fn musicbrainz_disc_identity(_cd: &CdDisc) -> anyhow::Result<(String, String)> {
-    bail!("MusicBrainz disc lookup is available only on Linux")
-}
-
 fn ca_bundle() -> Option<PathBuf> {
+    let beside_executable = sidecar("ca-certificates.crt");
     let bundled = std::env::current_exe().ok().and_then(|executable| {
         executable
             .parent()?
             .parent()
             .map(|usr| usr.join("share/suture/ca-certificates.crt"))
     });
-    bundled
+    [Some(beside_executable), bundled]
         .into_iter()
+        .flatten()
         .chain([PathBuf::from("/etc/ssl/certs/ca-certificates.crt")])
         .find(|path| path.is_file())
 }
@@ -459,9 +503,7 @@ fn rip_disc_to_folder(
 ) -> anyhow::Result<Vec<PathBuf>> {
     let start = Instant::now();
     let total_bytes = disc.total_sectors().saturating_mul(2352).max(1);
-    let mut child = Command::new(sidecar("cdparanoia"))
-        .arg("-d")
-        .arg(&disc.drive.device)
+    let mut child = cd_reader_command(&disc.drive.device)
         .arg("-B")
         .current_dir(folder)
         .stdout(Stdio::null())
@@ -679,7 +721,7 @@ fn export_tracks(
 }
 
 pub fn cd_reader_available() -> bool {
-    Command::new(sidecar("cdparanoia"))
+    Command::new(cd_reader_path())
         .arg("--version")
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -706,6 +748,57 @@ TOTAL 34970 [07:46.20]    (audio only)
         assert_eq!(tracks[0].number, 1);
         assert_eq!(tracks[1].first_sector, 21_770);
         assert!((tracks[0].duration_secs - 290.266).abs() < 0.01);
+    }
+
+    #[test]
+    fn parses_windows_optical_drives() {
+        let json = r#"[{"Drive":"D:","Name":"USB DVD Drive","MediaLoaded":true}]"#;
+        let drives = parse_windows_drives(json).unwrap();
+        assert_eq!(drives.len(), 1);
+        assert_eq!(drives[0].device, PathBuf::from("D:"));
+        assert!(drives[0].audio_media);
+    }
+
+    #[test]
+    fn parses_macos_audio_disc_status() {
+        let drives = parse_macos_drive_status("Type: Audio CD\nName: External DVD");
+        assert_eq!(drives.len(), 1);
+        assert!(drives[0].audio_media);
+        assert_eq!(drives[0].device, PathBuf::from("default"));
+    }
+
+    #[test]
+    fn creates_the_reference_musicbrainz_disc_id() {
+        let offsets = [
+            150, 9700, 25887, 39297, 53795, 63735, 77517, 94877, 107270, 123552, 135522, 148422,
+            161197, 174790, 192022, 205545, 218010, 228700, 239590, 255470, 266932, 288750, 303602,
+        ];
+        let tracks = offsets
+            .windows(2)
+            .enumerate()
+            .map(|(index, pair)| CdTocTrack {
+                number: index as u32 + 1,
+                first_sector: pair[0] - 150,
+                sectors: pair[1] - pair[0],
+                duration_secs: (pair[1] - pair[0]) as f64 / 75.0,
+                title: None,
+            })
+            .collect();
+        let disc = CdDisc {
+            drive: CdDrive {
+                device: "default".into(),
+                name: "Test drive".into(),
+                audio_media: true,
+                audio_tracks: Some(22),
+            },
+            tracks,
+        };
+        let (id, toc) = musicbrainz_disc_identity(&disc).unwrap();
+        assert_eq!(id, "xUp1F2NkfP8s8jaeFn_Av3jNEI4-");
+        assert_eq!(
+            toc,
+            "1 22 303602 150 9700 25887 39297 53795 63735 77517 94877 107270 123552 135522 148422 161197 174790 192022 205545 218010 228700 239590 255470 266932 288750"
+        );
     }
 
     #[test]

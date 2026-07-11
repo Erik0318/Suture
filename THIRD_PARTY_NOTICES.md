@@ -4,7 +4,7 @@ Suture is MIT-licensed and invokes media tools as separate processes. Release ar
 
 ## FFmpeg and ffprobe
 
-The Linux AppImage is assembled from the Ubuntu 22.04 FFmpeg package. That build enables GPL components, including x264. FFmpeg is distributed under GPL-2.0-or-later for this configuration. The release bundle includes the package copyright file, and the release notes must identify the exact Ubuntu package version and source-package URL.
+The release packages include FFmpeg and ffprobe from Ubuntu, MSYS2, or Homebrew. Some configurations enable GPL components, including x264, and are therefore distributed under GPL-2.0-or-later. Each platform package keeps the applicable upstream license.
 
 - Project: <https://ffmpeg.org/>
 - Source: <https://packages.ubuntu.com/jammy/ffmpeg>
@@ -18,24 +18,26 @@ The FFmpeg build used by release CI may include x264. x264 is GPL-2.0-or-later.
 
 ## cdparanoia and libcdio
 
-The Linux AppImage includes the Ubuntu 22.04 cdparanoia executable and its discovered runtime libraries for audio-CD extraction. Their copyright files are copied into the release bundle. cdparanoia is GPL-2.0-or-later; linked library licenses are documented by their respective Ubuntu source packages.
+The Linux AppImage includes Ubuntu cdparanoia. Windows and macOS include the libcdio-paranoia port, which provides the same direct digital audio extraction and error-correction workflow across platforms. cdparanoia and libcdio-paranoia are GPL-2.0-or-later/GPL-3.0-or-later according to the packaged version; linked libraries keep their respective licenses.
 
 - cdparanoia source package: <https://packages.ubuntu.com/source/jammy/cdparanoia>
 - GNU libcdio: <https://www.gnu.org/software/libcdio/>
 
-## libdiscid and MusicBrainz metadata
+## MusicBrainz metadata
 
-The Linux AppImage includes libdiscid under LGPL-2.1-or-later to calculate MusicBrainz disc IDs. When an audio CD is recognized, Suture makes one HTTPS request to the MusicBrainz web service to retrieve track names. MusicBrainz core data is CC0.
+Suture calculates MusicBrainz-compatible disc IDs from the CD table of contents in Rust. When an audio CD is recognized, it makes one HTTPS request to the MusicBrainz web service to retrieve track names. MusicBrainz core data is CC0.
 
-- libdiscid: <https://musicbrainz.org/doc/libdiscid>
+- Disc ID specification: <https://musicbrainz.org/doc/Disc_ID_Calculation>
 - MusicBrainz data licensing: <https://musicbrainz.org/doc/About/Data_License>
 
 ## curl and CA certificates
 
-The Linux AppImage includes the Ubuntu curl executable, its discovered runtime libraries, and the Ubuntu CA certificate bundle for the MusicBrainz HTTPS request. Their package copyright files are copied into the release bundle.
+Every platform package includes curl, its required runtime libraries, and a CA certificate bundle for the MusicBrainz HTTPS request.
 
 - curl: <https://curl.se/>
 - Ubuntu curl package: <https://packages.ubuntu.com/jammy/curl>
+- MSYS2 curl package: <https://packages.msys2.org/packages/mingw-w64-ucrt-x86_64-curl>
+- Homebrew curl formula: <https://formulae.brew.sh/formula/curl>
 
 ## Rust dependencies
 
