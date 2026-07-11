@@ -271,7 +271,7 @@ pub enum UiEvent {
     DiscRead(Result<CdDisc, String>),
     DiscMetadata {
         device: PathBuf,
-        titles: Option<Vec<String>>,
+        result: Result<Vec<String>, String>,
     },
     CdProgress(ProgressInfo),
     CdImported(Vec<Track>),
