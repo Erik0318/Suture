@@ -6,7 +6,7 @@ linuxdeploy="${LINUXDEPLOY:-./linuxdeploy-x86_64.AppImage}"
 appdir="${APPDIR:-AppDir}"
 
 rm -rf "$appdir"
-mkdir -p "$appdir/usr/lib/suture" "$appdir/usr/share/doc/suture"
+mkdir -p "$appdir/usr/share/doc/suture"
 xkbcommon_x11="$(ldconfig -p | awk '/libxkbcommon-x11.so.0/{print $NF; exit}')"
 if [[ -z "$xkbcommon_x11" ]]; then
   echo "libxkbcommon-x11.so.0 is required for X11 support" >&2
@@ -22,12 +22,6 @@ APPIMAGE_EXTRACT_AND_RUN=1 "$linuxdeploy" \
   --library "$xkbcommon_x11" \
   --desktop-file packaging/io.github.erik0318.Suture.desktop \
   --icon-file assets/io.github.erik0318.Suture.svg
-
-for tool in ffmpeg ffprobe cdparanoia; do
-  if [[ -x "$appdir/usr/bin/$tool" ]]; then
-    mv "$appdir/usr/bin/$tool" "$appdir/usr/lib/suture/$tool"
-  fi
-done
 
 bundled_xkbcommon_x11="$(find "$appdir/usr/lib" -maxdepth 1 -name 'libxkbcommon-x11.so.0*' -print -quit)"
 if [[ -z "$bundled_xkbcommon_x11" ]]; then

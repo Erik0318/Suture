@@ -33,7 +33,7 @@ jobs:
         run: cargo test --locked --all-features
 
   appimage:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     needs: test
     runs-on: ubuntu-22.04
     steps:
@@ -56,21 +56,25 @@ jobs:
             https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
           chmod +x linuxdeploy-x86_64.AppImage scripts/package-appimage.sh
       - name: Package
-        run: scripts/package-appimage.sh "0.1.0-alpha.1"
+        run: scripts/package-appimage.sh "0.1.0-alpha.2"
       - name: Inspect bundled tools
         run: |
-          APPIMAGE_EXTRACT_AND_RUN=1 ./Suture-0.1.0-alpha.1-x86_64.AppImage --appimage-extract
+          APPIMAGE_EXTRACT_AND_RUN=1 ./Suture-0.1.0-alpha.2-x86_64.AppImage --appimage-extract
           test -x squashfs-root/usr/bin/suture
-          test -x squashfs-root/usr/lib/suture/ffmpeg
-          test -x squashfs-root/usr/lib/suture/ffprobe
-          test -x squashfs-root/usr/lib/suture/cdparanoia
-          squashfs-root/usr/lib/suture/ffmpeg -version
-          squashfs-root/usr/lib/suture/ffprobe -version
-          squashfs-root/usr/lib/suture/cdparanoia --version
+          test -x squashfs-root/usr/bin/ffmpeg
+          test -x squashfs-root/usr/bin/ffprobe
+          test -x squashfs-root/usr/bin/cdparanoia
+          env -i HOME="$HOME" PATH=/usr/bin:/bin squashfs-root/usr/bin/ffmpeg -version
+          env -i HOME="$HOME" PATH=/usr/bin:/bin squashfs-root/usr/bin/ffprobe -version
+          env -i HOME="$HOME" PATH=/usr/bin:/bin squashfs-root/usr/bin/cdparanoia --version
+          if ldd squashfs-root/usr/bin/ffprobe | grep -q 'not found'; then
+            ldd squashfs-root/usr/bin/ffprobe
+            exit 1
+          fi
       - name: Headless launch smoke test
         run: |
           set +e
-          APPIMAGE_EXTRACT_AND_RUN=1 timeout 8s xvfb-run -a ./Suture-0.1.0-alpha.1-x86_64.AppImage
+          APPIMAGE_EXTRACT_AND_RUN=1 timeout 8s xvfb-run -a ./Suture-0.1.0-alpha.2-x86_64.AppImage
           status=$?
           set -e
           if [[ "$status" -ne 0 && "$status" -ne 124 ]]; then
@@ -80,23 +84,23 @@ jobs:
         with:
           name: Suture-AppImage-x86_64
           path: |
-            Suture-0.1.0-alpha.1-x86_64.AppImage
-            Suture-0.1.0-alpha.1-x86_64.AppImage.sha256
+            Suture-0.1.0-alpha.2-x86_64.AppImage
+            Suture-0.1.0-alpha.2-x86_64.AppImage.sha256
       - name: Publish public alpha prerelease
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.1.0-alpha.1
-          name: Suture 0.1.0 alpha 1
+          tag_name: v0.1.0-alpha.2
+          name: Suture 0.1.0 alpha 2
           prerelease: true
           generate_release_notes: true
           body: |
-            Early Linux x86_64 test build. Automated audio/video export and AppImage launch checks pass on Ubuntu 22.04.
+            Linux x86_64 test build fixing the bundled ffprobe libraries, CD read feedback, cover drag-and-drop, and narrow-window resizing. Automated audio/video export, isolated bundled-tool startup, and AppImage launch checks pass on Ubuntu 22.04.
 
             Physical audio-CD hardware and the other listed Linux distributions still need manual testing. Please treat this as an alpha build.
           files: |
-            Suture-0.1.0-alpha.1-x86_64.AppImage
-            Suture-0.1.0-alpha.1-x86_64.AppImage.sha256
+            Suture-0.1.0-alpha.2-x86_64.AppImage
+            Suture-0.1.0-alpha.2-x86_64.AppImage.sha256
             LICENSE
             THIRD_PARTY_NOTICES.md
             CHANGELOG.md
