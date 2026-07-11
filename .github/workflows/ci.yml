@@ -144,13 +144,11 @@ jobs:
           & "$app/curl.exe" --version
           & "$app/cd-paranoia.exe" --version
           if (-not (Test-Path "$app/ca-certificates.crt")) { throw "CA bundle missing" }
-      - name: Launch smoke test
+      - name: Packaged application self-test
         shell: pwsh
         run: |
-          $process = Start-Process -FilePath "dist-windows/app/Suture.exe" -PassThru
-          Start-Sleep -Seconds 8
-          if ($process.HasExited) { throw "Suture exited during the Windows smoke test with $($process.ExitCode)" }
-          Stop-Process -Id $process.Id -Force
+          & "dist-windows/app/Suture.exe" --self-test
+          if ($LASTEXITCODE -ne 0) { throw "Packaged Suture self-test failed with $LASTEXITCODE" }
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: Suture1.0.0-Windows
