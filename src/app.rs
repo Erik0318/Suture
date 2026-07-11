@@ -40,6 +40,7 @@ pub struct SutureApp {
     toc_started: Option<Instant>,
     disc: Option<CdDisc>,
     cd_metadata_loading: bool,
+    cd_metadata_error: Option<String>,
     cd_reader_available: bool,
     confirm_overwrite: bool,
     cd_temp_dirs: BTreeSet<PathBuf>,
@@ -90,6 +91,7 @@ impl SutureApp {
             toc_started: None,
             disc: None,
             cd_metadata_loading: false,
+            cd_metadata_error: None,
             cd_reader_available,
             confirm_overwrite: false,
             cd_temp_dirs: BTreeSet::new(),
@@ -182,6 +184,7 @@ impl SutureApp {
                             self.toc_requested = Some(drive.device.clone());
                             self.toc_started = Some(Instant::now());
                             self.cd_metadata_loading = false;
+                            self.cd_metadata_error = None;
                             cd::spawn_read_disc(drive.clone(), self.tx.clone());
                         }
                     } else {
@@ -189,6 +192,7 @@ impl SutureApp {
                         self.toc_requested = None;
                         self.toc_started = None;
                         self.cd_metadata_loading = false;
+                        self.cd_metadata_error = None;
                     }
                 }
                 UiEvent::DiscRead(result) => {
@@ -197,25 +201,31 @@ impl SutureApp {
                         Ok(disc) => {
                             self.disc = Some(disc);
                             self.cd_metadata_loading = true;
+                            self.cd_metadata_error = None;
                         }
                         Err(message) => {
                             self.warnings.push(message);
                             self.disc = None;
                             self.cd_metadata_loading = false;
+                            self.cd_metadata_error = None;
                         }
                     }
                 }
-                UiEvent::DiscMetadata { device, titles } => {
+                UiEvent::DiscMetadata { device, result } => {
                     if let Some(disc) = self
                         .disc
                         .as_mut()
                         .filter(|disc| disc.drive.device == device)
                     {
                         self.cd_metadata_loading = false;
-                        if let Some(titles) = titles {
-                            for (track, title) in disc.tracks.iter_mut().zip(titles) {
-                                track.title = Some(title);
+                        match result {
+                            Ok(titles) => {
+                                self.cd_metadata_error = None;
+                                for (track, title) in disc.tracks.iter_mut().zip(titles) {
+                                    track.title = Some(title);
+                                }
                             }
+                            Err(message) => self.cd_metadata_error = Some(message),
                         }
                     }
                 }
@@ -349,6 +359,18 @@ impl SutureApp {
         self.cancel = Some(cancel);
         self.busy = true;
         self.error = None;
+    }
+
+    fn retry_cd_metadata(&mut self) {
+        let Some(disc) = self.disc.clone() else {
+            return;
+        };
+        if self.busy || self.cd_metadata_loading {
+            return;
+        }
+        self.cd_metadata_loading = true;
+        self.cd_metadata_error = None;
+        cd::spawn_lookup_titles(disc, self.tx.clone());
     }
 
     fn export_cd_tracks(&mut self) {
@@ -553,7 +575,16 @@ impl SutureApp {
                     }
                     if self.cd_metadata_loading {
                         ui.spinner();
-                        ui.label(RichText::new("Looking up track names…").weak());
+                        ui.label(RichText::new("Matching this disc's full track map…").weak());
+                    } else if let Some(message) = self.cd_metadata_error.clone() {
+                        ui.colored_label(Color32::YELLOW, "Track names unavailable")
+                            .on_hover_text(message);
+                        if ui
+                            .add_enabled(!self.busy, egui::Button::new("Retry names"))
+                            .clicked()
+                        {
+                            self.retry_cd_metadata();
+                        }
                     }
                 } else if !self.cd_reader_available {
                     ui.colored_label(Color32::YELLOW, "CD reader is unavailable in this build");
@@ -565,6 +596,7 @@ impl SutureApp {
                     self.toc_requested = Some(drive.device.clone());
                     self.toc_started = Some(Instant::now());
                     self.cd_metadata_loading = false;
+                    self.cd_metadata_error = None;
                     cd::spawn_read_disc(drive, self.tx.clone());
                 }
             });

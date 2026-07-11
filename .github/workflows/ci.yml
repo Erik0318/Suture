@@ -104,7 +104,7 @@ jobs:
           make_latest: true
           generate_release_notes: true
           body: |
-            Suture 1.0.0 for Linux x86_64. This release adds a CD-only separate-track WAV export, simplifies progress to one track-thread bar, and removes drag-and-drop.
+            Suture 1.0.0 for Linux x86_64. This release adds a CD-only separate-track WAV export, optional timestamp files, and resilient MusicBrainz track-name matching using the disc's full track map.
 
             Automated audio/video export, isolated bundled-tool startup, unit tests, strict Clippy, and AppImage launch checks pass on Ubuntu 22.04.
           files: |

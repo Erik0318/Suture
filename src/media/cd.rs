@@ -86,15 +86,23 @@ pub fn spawn_read_disc(drive: CdDrive, tx: Sender<UiEvent>) {
             if tx.send(UiEvent::DiscRead(Ok(disc.clone()))).is_err() {
                 return;
             }
-            let titles = lookup_track_titles(&disc).ok();
+            let result = lookup_track_titles(&disc).map_err(|error| format!("{error:#}"));
             let _ = tx.send(UiEvent::DiscMetadata {
                 device: drive.device.clone(),
-                titles,
+                result,
             });
         }
         Err(error) => {
             let _ = tx.send(UiEvent::DiscRead(Err(format!("{error:#}"))));
         }
+    });
+}
+
+pub fn spawn_lookup_titles(disc: CdDisc, tx: Sender<UiEvent>) {
+    thread::spawn(move || {
+        let device = disc.drive.device.clone();
+        let result = lookup_track_titles(&disc).map_err(|error| format!("{error:#}"));
+        let _ = tx.send(UiEvent::DiscMetadata { device, result });
     });
 }
 
@@ -237,6 +245,7 @@ unsafe extern "C" {
         offsets: *const c_int,
     ) -> c_int;
     fn discid_get_id(disc: *mut DiscIdHandle) -> *mut c_char;
+    fn discid_get_toc_string(disc: *mut DiscIdHandle) -> *mut c_char;
 }
 
 #[cfg(target_os = "linux")]
@@ -250,7 +259,7 @@ impl Drop for OwnedDiscId {
 }
 
 #[cfg(target_os = "linux")]
-fn musicbrainz_disc_id(cd: &CdDisc) -> anyhow::Result<String> {
+fn musicbrainz_disc_identity(cd: &CdDisc) -> anyhow::Result<(String, String)> {
     let disc = unsafe { discid_new() };
     if disc.is_null() {
         bail!("Could not allocate a MusicBrainz disc reader");
@@ -288,11 +297,22 @@ fn musicbrainz_disc_id(cd: &CdDisc) -> anyhow::Result<String> {
     if id.is_null() {
         bail!("libdiscid did not return a MusicBrainz disc ID");
     }
-    Ok(unsafe { CStr::from_ptr(id) }.to_string_lossy().into_owned())
+    let toc = unsafe { discid_get_toc_string(disc.0) };
+    if toc.is_null() {
+        bail!("libdiscid did not return the audio CD table of contents");
+    }
+    let id = unsafe { CStr::from_ptr(id) }.to_string_lossy().into_owned();
+    let toc = unsafe { CStr::from_ptr(toc) }
+        .to_string_lossy()
+        .into_owned();
+    if id.trim().is_empty() || toc.trim().is_empty() {
+        bail!("libdiscid returned incomplete audio CD identification data");
+    }
+    Ok((id, toc))
 }
 
 #[cfg(not(target_os = "linux"))]
-fn musicbrainz_disc_id(_cd: &CdDisc) -> anyhow::Result<String> {
+fn musicbrainz_disc_identity(_cd: &CdDisc) -> anyhow::Result<(String, String)> {
     bail!("MusicBrainz disc lookup is available only on Linux")
 }
 
@@ -309,30 +329,55 @@ fn ca_bundle() -> Option<PathBuf> {
         .find(|path| path.is_file())
 }
 
-fn lookup_track_titles(disc: &CdDisc) -> anyhow::Result<Vec<String>> {
-    let disc_id = musicbrainz_disc_id(disc)?;
-    let url = format!("https://musicbrainz.org/ws/2/discid/{disc_id}?inc=recordings&fmt=json");
+fn musicbrainz_command(disc_id: &str, toc: &str) -> Command {
+    let url = format!("https://musicbrainz.org/ws/2/discid/{disc_id}");
     let mut command = Command::new(sidecar("curl"));
     command.args([
         "--silent",
         "--show-error",
         "--fail",
+        "--get",
+        "--connect-timeout",
+        "5",
         "--max-time",
-        "12",
+        "20",
+        "--retry",
+        "2",
+        "--retry-delay",
+        "1",
         "--user-agent",
         "Suture/1.0.0 (https://github.com/Erik0318/Suture)",
+        "--data-urlencode",
+        "inc=recordings",
+        "--data-urlencode",
+        "fmt=json",
+        "--data-urlencode",
+        "cdstubs=no",
+        "--data-urlencode",
     ]);
+    command.arg(format!("toc={toc}"));
     if let Some(ca_bundle) = ca_bundle() {
         command.arg("--cacert").arg(ca_bundle);
     }
-    let output = command
-        .arg(url)
+    command.arg(url);
+    command
+}
+
+fn lookup_track_titles(disc: &CdDisc) -> anyhow::Result<Vec<String>> {
+    let (disc_id, toc) = musicbrainz_disc_identity(disc)?;
+    let output = musicbrainz_command(&disc_id, &toc)
         .output()
         .with_context(|| "Could not start the bundled MusicBrainz client")?;
     if !output.status.success() {
+        let detail = String::from_utf8_lossy(&output.stderr);
+        let detail = detail.trim();
         bail!(
-            "MusicBrainz did not recognize this disc or could not be reached: {}",
-            String::from_utf8_lossy(&output.stderr).trim()
+            "MusicBrainz could not match this disc. Check the internet connection and retry{}",
+            if detail.is_empty() {
+                String::new()
+            } else {
+                format!(": {detail}")
+            }
         );
     }
     parse_musicbrainz_titles(
@@ -748,6 +793,51 @@ TOTAL 34970 [07:46.20]    (audio only)
         assert_eq!(
             parse_musicbrainz_titles(json, "correct-disc", 2).unwrap(),
             vec!["Психолирика", "Суицидальное диско"]
+        );
+    }
+
+    #[test]
+    fn musicbrainz_titles_accept_a_toc_fuzzy_match() {
+        let json = r#"{
+          "releases": [{
+            "media": [{
+              "discs": [{"id": "a-different-pressing"}],
+              "tracks": [
+                {"title": "First song"},
+                {"title": "Second song"}
+              ]
+            }]
+          }]
+        }"#;
+        assert_eq!(
+            parse_musicbrainz_titles(json, "unrecognized-disc-id", 2).unwrap(),
+            vec!["First song", "Second song"]
+        );
+    }
+
+    #[test]
+    fn musicbrainz_request_includes_the_full_toc() {
+        let toc = "1 2 30150 150 15150";
+        let command = musicbrainz_command("test-disc", toc);
+        let args = command
+            .get_args()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+        assert!(args
+            .windows(2)
+            .any(|pair| pair[0] == "--data-urlencode" && pair[1] == "inc=recordings"));
+        assert!(args
+            .windows(2)
+            .any(|pair| pair[0] == "--data-urlencode" && pair[1] == "fmt=json"));
+        assert!(args
+            .windows(2)
+            .any(|pair| pair[0] == "--data-urlencode" && pair[1] == "cdstubs=no"));
+        assert!(args
+            .windows(2)
+            .any(|pair| pair[0] == "--data-urlencode" && pair[1] == format!("toc={toc}")));
+        assert_eq!(
+            args.last().map(String::as_str),
+            Some("https://musicbrainz.org/ws/2/discid/test-disc")
         );
     }
 
