@@ -537,14 +537,17 @@ impl SutureApp {
                 input.raw.hovered_files.iter().any(|file| {
                     file.path
                         .as_deref()
-                        .is_some_and(|path| cover::looks_like_image(path))
+                        .is_some_and(cover::looks_like_image)
                 })
             });
             let mut frame = egui::Frame::group(ui.style());
             if cover_hovered {
                 frame = frame
                     .fill(ui.visuals().selection.bg_fill.linear_multiply(0.35))
-                    .stroke(egui::Stroke::new(2.0, ui.visuals().selection.stroke.color));
+                    .stroke(egui::Stroke::new(
+                        2.0_f32,
+                        ui.visuals().selection.stroke.color,
+                    ));
             }
             frame.show(ui, |ui| {
                 ui.set_width(size.x);
