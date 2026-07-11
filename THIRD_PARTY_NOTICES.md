@@ -23,7 +23,20 @@ The Linux AppImage includes the Ubuntu 22.04 cdparanoia executable and its disco
 - cdparanoia source package: <https://packages.ubuntu.com/source/jammy/cdparanoia>
 - GNU libcdio: <https://www.gnu.org/software/libcdio/>
 
+## libdiscid and MusicBrainz metadata
+
+The Linux AppImage includes libdiscid under LGPL-2.1-or-later to calculate MusicBrainz disc IDs. When an audio CD is recognized, Suture makes one HTTPS request to the MusicBrainz web service to retrieve track names. MusicBrainz core data is CC0.
+
+- libdiscid: <https://musicbrainz.org/doc/libdiscid>
+- MusicBrainz data licensing: <https://musicbrainz.org/doc/About/Data_License>
+
+## curl and CA certificates
+
+The Linux AppImage includes the Ubuntu curl executable, its discovered runtime libraries, and the Ubuntu CA certificate bundle for the MusicBrainz HTTPS request. Their package copyright files are copied into the release bundle.
+
+- curl: <https://curl.se/>
+- Ubuntu curl package: <https://packages.ubuntu.com/jammy/curl>
+
 ## Rust dependencies
 
-Rust crate licenses are recorded by `cargo-about` during release preparation. A final release must include the generated dependency report. The repository must not publish a release if that report is missing.
-
+Rust dependencies and their exact resolved versions are recorded in `Cargo.lock`; each dependency retains its own license.

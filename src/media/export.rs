@@ -341,6 +341,21 @@ fn write_cue(path: &Path, tracks: &[Track], output: &Path) -> anyhow::Result<()>
     Ok(())
 }
 
+fn timestamp_text(tracks: &[Track]) -> String {
+    let mut cursor = 0.0_f64;
+    let mut text = String::new();
+    for track in tracks {
+        text.push_str(&format!("{} {}\n", duration_label(cursor), track.label()));
+        cursor += track.duration_secs;
+    }
+    text
+}
+
+fn write_timestamps(path: &Path, tracks: &[Track]) -> anyhow::Result<()> {
+    fs::write(path, timestamp_text(tracks))?;
+    Ok(())
+}
+
 pub fn spawn(
     tracks: Vec<Track>,
     cover: Option<PathBuf>,
@@ -548,6 +563,14 @@ fn run_export(
             ));
         }
     }
+    if options.write_timestamps {
+        let timestamps = final_output.with_extension("timestamps.txt");
+        if let Err(error) = write_timestamps(&timestamps, tracks) {
+            warnings.push(format!(
+                "The media was exported, but the timestamp list failed: {error}"
+            ));
+        }
+    }
     Ok((final_output.clone(), warnings))
 }
 
@@ -584,6 +607,39 @@ mod tests {
     #[test]
     fn ffmpeg_time_parser_accepts_fractional_seconds() {
         assert_eq!(parse_ffmpeg_time("01:02:03.500000"), Some(3723.5));
+    }
+
+    #[test]
+    fn timestamp_list_uses_cumulative_starts_and_unicode_titles() {
+        let first = Track {
+            path: "one.flac".into(),
+            source: crate::model::TrackSource::Local,
+            display_name: "one.flac".into(),
+            title: Some("Психолирика".into()),
+            artist: None,
+            album: None,
+            track_number: None,
+            disc_number: None,
+            codec: "flac".into(),
+            container: "flac".into(),
+            duration_secs: 71.0,
+            sample_rate: Some(44_100),
+            channels: Some(2),
+            channel_layout: Some("stereo".into()),
+            bit_depth: Some(16),
+            bitrate: None,
+            lossless: true,
+            probe_error: None,
+            original_index: 0,
+        };
+        let mut second = first.clone();
+        second.title = Some("Суицидальное диско".into());
+        second.duration_secs = 321.0;
+        second.original_index = 1;
+        assert_eq!(
+            timestamp_text(&[first, second]),
+            "0:00 Психолирика\n1:11 Суицидальное диско\n"
+        );
     }
 
     #[test]

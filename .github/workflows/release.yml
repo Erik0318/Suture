@@ -17,7 +17,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             libudev-dev libgtk-3-dev libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev \
-            pkg-config ffmpeg cdparanoia curl file
+            pkg-config ffmpeg cdparanoia libdiscid-dev curl ca-certificates file
       - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
         with:
           toolchain: 1.97.0
@@ -35,18 +35,20 @@ jobs:
         run: scripts/package-appimage.sh "${GITHUB_REF_NAME#v}"
       - name: Validate bundled tools
         run: |
-          APPIMAGE_EXTRACT_AND_RUN=1 ./Suture-*.AppImage --appimage-extract
+          APPIMAGE_EXTRACT_AND_RUN=1 ./Suture*.AppImage --appimage-extract
           env -i HOME="$HOME" PATH=/usr/bin:/bin squashfs-root/usr/bin/ffmpeg -version
           env -i HOME="$HOME" PATH=/usr/bin:/bin squashfs-root/usr/bin/ffprobe -version
           env -i HOME="$HOME" PATH=/usr/bin:/bin squashfs-root/usr/bin/cdparanoia --version
+          env -i HOME="$HOME" PATH=/usr/bin:/bin squashfs-root/usr/bin/curl --version
           ! ldd squashfs-root/usr/bin/ffprobe | grep -q 'not found'
+          ! ldd squashfs-root/usr/bin/suture | grep -q 'not found'
       - name: Release
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
           files: |
-            Suture-*.AppImage
-            Suture-*.AppImage.sha256
+            Suture*.AppImage
+            Suture*.AppImage.sha256
             LICENSE
             THIRD_PARTY_NOTICES.md
             CHANGELOG.md

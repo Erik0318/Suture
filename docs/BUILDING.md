@@ -4,7 +4,8 @@
 
 ```bash
 sudo dnf install rust cargo gcc gcc-c++ pkgconf-pkg-config systemd-devel \
-  gtk3-devel libxkbcommon-devel libxkbcommon-x11-devel wayland-devel ffmpeg-free cdparanoia
+  gtk3-devel libxkbcommon-devel libxkbcommon-x11-devel wayland-devel ffmpeg-free \
+  cdparanoia libdiscid-devel curl ca-certificates
 cargo run
 ```
 
@@ -14,7 +15,7 @@ If Fedora's FFmpeg build lacks a codec needed for testing, point Suture at anoth
 SUTURE_MEDIA_DIR=/path/to/bin cargo run
 ```
 
-That directory must contain `ffmpeg`, `ffprobe`, and `cdparanoia`. Release builds ignore the host PATH because the tools live inside the AppImage.
+That directory must contain `ffmpeg`, `ffprobe`, `cdparanoia`, and `curl`. Release builds ignore the host PATH because the tools live inside the AppImage.
 
 ## Checks
 
@@ -26,4 +27,4 @@ cargo test --all-features
 
 ## AppImage
 
-Release CI builds on Ubuntu 22.04, stages the Rust executable and media sidecars with linuxdeploy, and creates `Suture-<version>-x86_64.AppImage` plus its SHA-256 checksum. A version tag such as `v0.1.0` triggers the workflow after the CI job succeeds.
+Release CI builds on Ubuntu 22.04, stages the Rust executable and media sidecars with linuxdeploy, and creates `Suture1.0.0.AppImage` plus its SHA-256 checksum. The `v1.0.0` release is published only after the CI job succeeds.

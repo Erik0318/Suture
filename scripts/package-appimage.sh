@@ -6,7 +6,7 @@ linuxdeploy="${LINUXDEPLOY:-./linuxdeploy-x86_64.AppImage}"
 appdir="${APPDIR:-AppDir}"
 
 rm -rf "$appdir"
-mkdir -p "$appdir/usr/share/doc/suture"
+mkdir -p "$appdir/usr/share/doc/suture" "$appdir/usr/share/suture"
 xkbcommon_x11="$(ldconfig -p | awk '/libxkbcommon-x11.so.0/{print $NF; exit}')"
 if [[ -z "$xkbcommon_x11" ]]; then
   echo "libxkbcommon-x11.so.0 is required for X11 support" >&2
@@ -19,6 +19,7 @@ APPIMAGE_EXTRACT_AND_RUN=1 "$linuxdeploy" \
   --executable "$(command -v ffmpeg)" \
   --executable "$(command -v ffprobe)" \
   --executable "$(command -v cdparanoia)" \
+  --executable "$(command -v curl)" \
   --library "$xkbcommon_x11" \
   --desktop-file packaging/io.github.erik0318.Suture.desktop \
   --icon-file assets/io.github.erik0318.Suture.svg
@@ -31,9 +32,12 @@ fi
 ln -sfn "$(basename "$bundled_xkbcommon_x11")" "$appdir/usr/lib/libxkbcommon-x11.so"
 
 cp LICENSE THIRD_PARTY_NOTICES.md "$appdir/usr/share/doc/suture/"
+cp /etc/ssl/certs/ca-certificates.crt "$appdir/usr/share/suture/"
 cp /usr/share/doc/ffmpeg/copyright "$appdir/usr/share/doc/suture/FFMPEG_COPYRIGHT" || true
 cp /usr/share/doc/cdparanoia/copyright "$appdir/usr/share/doc/suture/CDPARANOIA_COPYRIGHT" || true
+cp /usr/share/doc/libdiscid0/copyright "$appdir/usr/share/doc/suture/LIBDISCID_COPYRIGHT" || true
+cp /usr/share/doc/curl/copyright "$appdir/usr/share/doc/suture/CURL_COPYRIGHT" || true
 
-export OUTPUT="Suture-${version}-x86_64.AppImage"
+export OUTPUT="Suture${version}.AppImage"
 APPIMAGE_EXTRACT_AND_RUN=1 "$linuxdeploy" --appdir "$appdir" --output appimage
 sha256sum "$OUTPUT" > "$OUTPUT.sha256"
