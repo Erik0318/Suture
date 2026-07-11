@@ -19,7 +19,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             libudev-dev libgtk-3-dev libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev \
-            pkg-config ffmpeg cdparanoia
+            pkg-config ffmpeg cdparanoia libdiscid-dev curl ca-certificates
       - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
         with:
           toolchain: 1.97.0
@@ -43,7 +43,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             libudev-dev libgtk-3-dev libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev \
-            pkg-config ffmpeg cdparanoia curl file xvfb xauth
+            pkg-config ffmpeg cdparanoia libdiscid-dev curl ca-certificates file xvfb xauth
       - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
         with:
           toolchain: 1.97.0
@@ -56,25 +56,32 @@ jobs:
             https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
           chmod +x linuxdeploy-x86_64.AppImage scripts/package-appimage.sh
       - name: Package
-        run: scripts/package-appimage.sh "0.1.0-alpha.2"
+        run: scripts/package-appimage.sh "1.0.0"
       - name: Inspect bundled tools
         run: |
-          APPIMAGE_EXTRACT_AND_RUN=1 ./Suture-0.1.0-alpha.2-x86_64.AppImage --appimage-extract
+          APPIMAGE_EXTRACT_AND_RUN=1 ./Suture1.0.0.AppImage --appimage-extract
           test -x squashfs-root/usr/bin/suture
           test -x squashfs-root/usr/bin/ffmpeg
           test -x squashfs-root/usr/bin/ffprobe
           test -x squashfs-root/usr/bin/cdparanoia
+          test -x squashfs-root/usr/bin/curl
+          test -f squashfs-root/usr/share/suture/ca-certificates.crt
           env -i HOME="$HOME" PATH=/usr/bin:/bin squashfs-root/usr/bin/ffmpeg -version
           env -i HOME="$HOME" PATH=/usr/bin:/bin squashfs-root/usr/bin/ffprobe -version
           env -i HOME="$HOME" PATH=/usr/bin:/bin squashfs-root/usr/bin/cdparanoia --version
+          env -i HOME="$HOME" PATH=/usr/bin:/bin squashfs-root/usr/bin/curl --version
           if ldd squashfs-root/usr/bin/ffprobe | grep -q 'not found'; then
             ldd squashfs-root/usr/bin/ffprobe
+            exit 1
+          fi
+          if ldd squashfs-root/usr/bin/suture | grep -q 'not found'; then
+            ldd squashfs-root/usr/bin/suture
             exit 1
           fi
       - name: Headless launch smoke test
         run: |
           set +e
-          APPIMAGE_EXTRACT_AND_RUN=1 timeout 8s xvfb-run -a ./Suture-0.1.0-alpha.2-x86_64.AppImage
+          APPIMAGE_EXTRACT_AND_RUN=1 timeout 8s xvfb-run -a ./Suture1.0.0.AppImage
           status=$?
           set -e
           if [[ "$status" -ne 0 && "$status" -ne 124 ]]; then
@@ -82,25 +89,26 @@ jobs:
           fi
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: Suture-AppImage-x86_64
+          name: Suture1.0.0-AppImage
           path: |
-            Suture-0.1.0-alpha.2-x86_64.AppImage
-            Suture-0.1.0-alpha.2-x86_64.AppImage.sha256
-      - name: Publish public alpha prerelease
+            Suture1.0.0.AppImage
+            Suture1.0.0.AppImage.sha256
+      - name: Publish Suture 1.0.0
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v0.1.0-alpha.2
-          name: Suture 0.1.0 alpha 2
-          prerelease: true
+          tag_name: v1.0.0
+          name: Suture 1.0.0
+          prerelease: false
+          make_latest: true
           generate_release_notes: true
           body: |
-            Linux x86_64 test build fixing the bundled ffprobe libraries, CD read feedback, cover drag-and-drop, and narrow-window resizing. Automated audio/video export, isolated bundled-tool startup, and AppImage launch checks pass on Ubuntu 22.04.
+            Suture 1.0.0 for Linux x86_64. This release adds a CD-only separate-track WAV export, simplifies progress to one track-thread bar, and removes drag-and-drop.
 
-            Physical audio-CD hardware and the other listed Linux distributions still need manual testing. Please treat this as an alpha build.
+            Automated audio/video export, isolated bundled-tool startup, unit tests, strict Clippy, and AppImage launch checks pass on Ubuntu 22.04.
           files: |
-            Suture-0.1.0-alpha.2-x86_64.AppImage
-            Suture-0.1.0-alpha.2-x86_64.AppImage.sha256
+            Suture1.0.0.AppImage
+            Suture1.0.0.AppImage.sha256
             LICENSE
             THIRD_PARTY_NOTICES.md
             CHANGELOG.md

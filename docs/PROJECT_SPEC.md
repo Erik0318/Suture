@@ -53,16 +53,16 @@ The user must be able to:
 - Select a folder
 - Select one or more individual audio files
 - Import tracks directly from an inserted audio CD without first choosing a local folder
-- Drag a folder or audio files onto the window
 - Add more files after the first selection
 - Remove individual tracks
 - Clear the entire project
 - Select an album-cover image manually
-- Drag an image onto the cover area
 - Replace or remove the selected cover
 - Choose an output location
 - Export one continuous audio file
 - Export one continuous video as MKV or MP4
+- Optionally write a UTF-8 timestamp list using cumulative track starts and titles
+- Export separate verified WAV tracks to a chosen folder when an audio CD is active
 - Cancel an active export
 - View export progress and a readable error message
 - Open the exported file’s containing folder
@@ -101,9 +101,9 @@ When one audio CD is detected:
 
 When multiple optical drives contain audio CDs, show a small drive chooser. When a disc is removed during import, stop safely, preserve a useful diagnostic, remove incomplete temporary tracks, and tell the user to reinsert the disc.
 
-Read local CD-TEXT when present. In the offline MVP, fall back to “Track 01”, “Track 02”, and so on. Do not query an online metadata service unless a later opt-in feature clearly explains the network request.
+Calculate a MusicBrainz disc ID from the verified table of contents and make one HTTPS metadata request for track names. Show the lookup state without blocking the GUI. If the disc is unknown or the request is unavailable, fall back to “Track 01”, “Track 02”, and so on without inventing metadata. Never upload audio or local file paths.
 
-Import the CD into a private temporary working directory as sequential 44.1 kHz, 16-bit stereo PCM WAV tracks. Do not write ripped tracks into the user’s music folder unless the user explicitly requests a future “Keep ripped tracks” option. Once imported, probe the temporary tracks and place them in the normal track list so ordering, removal, cover selection, and all export modes work exactly like local files.
+Import the CD into a private temporary working directory as sequential 44.1 kHz, 16-bit stereo PCM WAV tracks. Write separate tracks into a user folder only after the user invokes the CD-only action and chooses that folder. Refuse to overwrite existing track files. Once imported, probe the temporary tracks and place them in the normal track list so ordering, removal, cover selection, and all export modes work exactly like local files.
 
 CD track order must initially follow the disc table of contents. Preserve pregap information where it is available. Detect data-only and mixed-mode discs and never attempt to decode data tracks as audio. If the drive or disc reports read errors, retry through the paranoia reader, show the affected track, and surface a warning rather than silently producing damaged output.
 
@@ -769,7 +769,7 @@ Do not claim legal compliance without documenting exactly what is distributed.
 
 First supported artifact:
 
-Suture-<version>-x86_64.AppImage
+Suture1.0.0.AppImage
 
 The AppImage must include:
 

@@ -2,22 +2,20 @@
 
 Suture stitches ordered tracks into one continuous audio file or a static-cover video. It is a local-first native desktop app for albums, mixes, live recordings, and audio CDs.
 
-> The first public AppImage is still under validation. Do not treat the current `main` branch as a finished release.
-
 ## Download
 
-Verified builds will appear on [GitHub Releases](https://github.com/Erik0318/Suture/releases) as `Suture-<version>-x86_64.AppImage` with a SHA-256 checksum.
+Download `Suture1.0.0.AppImage` and its SHA-256 checksum from [GitHub Releases](https://github.com/Erik0318/Suture/releases).
 
 ```bash
-chmod +x Suture-*-x86_64.AppImage
-./Suture-*-x86_64.AppImage
+chmod +x Suture1.0.0.AppImage
+./Suture1.0.0.AppImage
 ```
 
 The AppImage bundles FFmpeg, ffprobe, and the audio-CD reader.
 
 ## Implemented on `main`
 
-- Add a folder, individual audio files, or dropped files
+- Add a folder or individual audio files
 - Probe media off the UI thread with at most four ffprobe workers
 - Natural filename, disc/track metadata, and manual ordering
 - Cover discovery, embedded-art extraction, validation, preview, replacement, and removal
@@ -29,12 +27,14 @@ The AppImage bundles FFmpeg, ffprobe, and the audio-CD reader.
 - Suture's track-thread waiting visualization with reduced-motion behavior
 - Linux optical-drive discovery through libudev
 - Audio-CD table-of-contents reading and sector-based cdparanoia import progress
+- CD-only export of verified, separate PCM WAV tracks into a chosen folder
+- Optional UTF-8 timestamp lists using cumulative track starts and titles
 - Safe temporary filenames and final-name replacement only after validation
 - Settings persistence and readable warning/error surfaces
 
 ## CD workflow
 
-Suture notices optical drives automatically. When an audio disc is inserted, it reads the table of contents and shows the track count and duration. Import begins only after the user clicks **Import CD**. The tracks enter the same reorder/export workflow as local audio.
+Suture notices optical drives automatically. When an audio disc is inserted, it reads the table of contents and shows the track count and duration. It calculates the disc ID with libdiscid and performs one MusicBrainz lookup for real track names; unknown discs and offline sessions retain numbered fallback names. **Import CD** adds the tracks to the same reorder/export workflow as local audio. **Export separate WAV tracks** appears only for a recognized audio CD and saves one verified track per file into a chosen folder without overwriting existing files.
 
 The shipped application uses a bundled cdparanoia sidecar controlled directly from Rust. It does not depend on abcde or a system FFmpeg installation.
 
@@ -50,7 +50,7 @@ The full acceptance specification is in [docs/PROJECT_SPEC.md](docs/PROJECT_SPEC
 
 ## Release status
 
-CI checks formatting, Clippy, and tests. Version tags trigger the Ubuntu 22.04 AppImage build and create a GitHub Release only when tests and packaging succeed. Real optical-drive tests and multi-distribution launch tests must be recorded before `v0.1.0` is called stable.
+CI checks formatting, strict Clippy, tests, bundled media tools, and a headless AppImage launch before publishing `Suture1.0.0.AppImage`.
 
 ## License
 

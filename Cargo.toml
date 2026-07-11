@@ -1,6 +1,6 @@
 [package]
 name = "suture"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2021"
 rust-version = "1.82"
 description = "Stitch ordered audio tracks into continuous audio or static-cover video"
@@ -33,4 +33,3 @@ lto = "thin"
 codegen-units = 1
 strip = "symbols"
 panic = "abort"
-

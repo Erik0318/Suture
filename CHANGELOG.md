@@ -2,6 +2,16 @@
 
 All notable changes to Suture are documented here.
 
+## 1.0.0 — 2026-07-10
+
+- Kept only the track-thread progress line and removed the duplicate lower bar
+- Removed file and cover drag-and-drop behavior
+- Added a CD-only action that exports separate verified PCM WAV tracks to a chosen folder
+- Added overwrite refusal and cleanup for interrupted separate-track CD exports
+- Added optional UTF-8 timestamp sidecars with cumulative starts and Unicode track names
+- Added MusicBrainz disc-ID lookup so known audio CDs import with real track titles
+- Standardized the Linux release asset as `Suture1.0.0.AppImage`
+
 ## 0.1.0-alpha.2 — 2026-07-10
 
 - Fixed the AppImage FFmpeg/ffprobe runtime library path that blocked file and folder imports

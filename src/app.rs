@@ -39,6 +39,7 @@ pub struct SutureApp {
     toc_requested: Option<PathBuf>,
     toc_started: Option<Instant>,
     disc: Option<CdDisc>,
+    cd_metadata_loading: bool,
     cd_reader_available: bool,
     confirm_overwrite: bool,
     cd_temp_dirs: BTreeSet<PathBuf>,
@@ -88,6 +89,7 @@ impl SutureApp {
             toc_requested: None,
             toc_started: None,
             disc: None,
+            cd_metadata_loading: false,
             cd_reader_available,
             confirm_overwrite: false,
             cd_temp_dirs: BTreeSet::new(),
@@ -141,31 +143,6 @@ impl SutureApp {
         }
     }
 
-    fn handle_dropped_files(&mut self, ctx: &egui::Context) {
-        let dropped = ctx.input(|input| input.raw.dropped_files.clone());
-        if dropped.is_empty() {
-            return;
-        }
-        let paths = dropped
-            .into_iter()
-            .filter_map(|file| file.path)
-            .collect::<Vec<_>>();
-        if let Some(image) = paths
-            .iter()
-            .find(|path| path.is_file() && cover::is_image_content(path))
-        {
-            self.set_cover(image.clone(), ctx);
-        }
-        if self.busy {
-            return;
-        }
-        let media = paths
-            .into_iter()
-            .filter(|path| path.is_dir() || !cover::is_image_content(path))
-            .collect();
-        self.start_scan(media);
-    }
-
     fn process_events(&mut self, ctx: &egui::Context) {
         while let Ok(event) = self.rx.try_recv() {
             match event {
@@ -204,21 +181,41 @@ impl SutureApp {
                         if self.toc_requested.as_ref() != Some(&drive.device) && !self.busy {
                             self.toc_requested = Some(drive.device.clone());
                             self.toc_started = Some(Instant::now());
+                            self.cd_metadata_loading = false;
                             cd::spawn_read_disc(drive.clone(), self.tx.clone());
                         }
                     } else {
                         self.disc = None;
                         self.toc_requested = None;
                         self.toc_started = None;
+                        self.cd_metadata_loading = false;
                     }
                 }
                 UiEvent::DiscRead(result) => {
                     self.toc_started = None;
                     match result {
-                        Ok(disc) => self.disc = Some(disc),
+                        Ok(disc) => {
+                            self.disc = Some(disc);
+                            self.cd_metadata_loading = true;
+                        }
                         Err(message) => {
                             self.warnings.push(message);
                             self.disc = None;
+                            self.cd_metadata_loading = false;
+                        }
+                    }
+                }
+                UiEvent::DiscMetadata { device, titles } => {
+                    if let Some(disc) = self
+                        .disc
+                        .as_mut()
+                        .filter(|disc| disc.drive.device == device)
+                    {
+                        self.cd_metadata_loading = false;
+                        if let Some(titles) = titles {
+                            for (track, title) in disc.tracks.iter_mut().zip(titles) {
+                                track.title = Some(title);
+                            }
                         }
                     }
                 }
@@ -229,6 +226,12 @@ impl SutureApp {
                         }
                     }
                     self.tracks.extend(tracks);
+                    self.busy = false;
+                    self.progress = None;
+                    self.cancel = None;
+                }
+                UiEvent::CdTracksExported(folder) => {
+                    self.completed_output = Some(folder);
                     self.busy = false;
                     self.progress = None;
                     self.cancel = None;
@@ -346,6 +349,29 @@ impl SutureApp {
         self.cancel = Some(cancel);
         self.busy = true;
         self.error = None;
+    }
+
+    fn export_cd_tracks(&mut self) {
+        let Some(disc) = self.disc.clone() else {
+            return;
+        };
+        if self.busy {
+            return;
+        }
+        let mut dialog = rfd::FileDialog::new().set_title("Choose a folder for the CD tracks");
+        if let Some(folder) = &self.settings.last_output_folder {
+            dialog = dialog.set_directory(folder);
+        }
+        let Some(folder) = dialog.pick_folder() else {
+            return;
+        };
+        self.settings.last_output_folder = Some(folder.clone());
+        let cancel = CancelToken::default();
+        cd::spawn_export_tracks(disc, folder, cancel.clone(), self.tx.clone());
+        self.cancel = Some(cancel);
+        self.busy = true;
+        self.error = None;
+        self.completed_output = None;
     }
 
     fn remove_selected(&mut self) {
@@ -508,10 +534,26 @@ impl SutureApp {
                         duration_label(disc.total_duration())
                     ));
                     if ui
-                        .add_enabled(!self.busy, egui::Button::new("Import CD"))
+                        .add_enabled(
+                            !self.busy && !self.cd_metadata_loading,
+                            egui::Button::new("Import CD"),
+                        )
                         .clicked()
                     {
                         self.import_cd();
+                    }
+                    if ui
+                        .add_enabled(
+                            !self.busy && !self.cd_metadata_loading,
+                            egui::Button::new("Export separate WAV tracks"),
+                        )
+                        .clicked()
+                    {
+                        self.export_cd_tracks();
+                    }
+                    if self.cd_metadata_loading {
+                        ui.spinner();
+                        ui.label(RichText::new("Looking up track names…").weak());
                     }
                 } else if !self.cd_reader_available {
                     ui.colored_label(Color32::YELLOW, "CD reader is unavailable in this build");
@@ -522,6 +564,7 @@ impl SutureApp {
                     let drive = self.drives[self.selected_drive].clone();
                     self.toc_requested = Some(drive.device.clone());
                     self.toc_started = Some(Instant::now());
+                    self.cd_metadata_loading = false;
                     cd::spawn_read_disc(drive, self.tx.clone());
                 }
             });
@@ -533,23 +576,7 @@ impl SutureApp {
             ui.label(RichText::new("Cover").strong());
             let width = ui.available_width().clamp(180.0, 280.0);
             let size = egui::vec2(width, (width * 0.9).clamp(160.0, 250.0));
-            let cover_hovered = ctx.input(|input| {
-                input
-                    .raw
-                    .hovered_files
-                    .iter()
-                    .any(|file| file.path.as_deref().is_some_and(cover::looks_like_image))
-            });
-            let mut frame = egui::Frame::group(ui.style());
-            if cover_hovered {
-                frame = frame
-                    .fill(ui.visuals().selection.bg_fill.linear_multiply(0.35))
-                    .stroke(egui::Stroke::new(
-                        2.0_f32,
-                        ui.visuals().selection.stroke.color,
-                    ));
-            }
-            frame.show(ui, |ui| {
+            egui::Frame::group(ui.style()).show(ui, |ui| {
                 ui.set_width(size.x);
                 ui.set_height(size.y);
                 if let Some(texture) = &self.cover_texture {
@@ -560,11 +587,7 @@ impl SutureApp {
                     });
                 } else {
                     ui.centered_and_justified(|ui| {
-                        ui.label(if cover_hovered {
-                            "Release to use this cover"
-                        } else {
-                            "Drop a cover here\nor choose one manually"
-                        });
+                        ui.label("Choose a cover manually");
                     });
                 }
             });
@@ -836,6 +859,10 @@ impl SutureApp {
                         }
                     });
             }
+            ui.checkbox(
+                &mut self.options.write_timestamps,
+                "Write timestamps (.txt)",
+            );
         });
         if self.options.kind == ExportKind::Audio
             && self.options.audio_format == AudioFormat::Flac
@@ -892,11 +919,14 @@ impl SutureApp {
             egui::Frame::group(ui.style()).show(ui, |ui| {
                 ui.horizontal(|ui| {
                     ui.label(RichText::new(format!("Finished: {}", output.display())).strong());
-                    if ui.button("Open containing folder").clicked() {
-                        if let Some(parent) = output.parent() {
-                            if let Err(error) = open::that(parent) {
-                                self.error = Some(format!("Could not open the folder: {error}"));
-                            }
+                    let folder = if output.is_dir() {
+                        output.clone()
+                    } else {
+                        output.parent().unwrap_or(&output).to_path_buf()
+                    };
+                    if ui.button("Open folder").clicked() {
+                        if let Err(error) = open::that(folder) {
+                            self.error = Some(format!("Could not open the folder: {error}"));
                         }
                     }
                 });
@@ -944,7 +974,6 @@ impl SutureApp {
 impl eframe::App for SutureApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.process_events(ctx);
-        self.handle_dropped_files(ctx);
         if self.busy || self.dragging.is_some() || self.toc_started.is_some() {
             ctx.request_repaint_after(Duration::from_millis(33));
         } else {

@@ -160,6 +160,7 @@ pub struct ExportOptions {
     pub fps: u32,
     pub output: Option<PathBuf>,
     pub write_cue: bool,
+    pub write_timestamps: bool,
     #[serde(skip)]
     pub replace_existing: bool,
 }
@@ -175,6 +176,7 @@ impl Default for ExportOptions {
             fps: 2,
             output: None,
             write_cue: false,
+            write_timestamps: false,
             replace_existing: false,
         }
     }
@@ -237,6 +239,7 @@ pub struct CdTocTrack {
     pub first_sector: u64,
     pub sectors: u64,
     pub duration_secs: f64,
+    pub title: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -266,8 +269,13 @@ pub enum UiEvent {
     ScanFailed(String),
     DrivesChanged(Vec<CdDrive>),
     DiscRead(Result<CdDisc, String>),
+    DiscMetadata {
+        device: PathBuf,
+        titles: Option<Vec<String>>,
+    },
     CdProgress(ProgressInfo),
     CdImported(Vec<Track>),
+    CdTracksExported(PathBuf),
     CdFailed(String),
     ExportProgress(ProgressInfo),
     ExportFinished {

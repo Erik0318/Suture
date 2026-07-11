@@ -1,4 +1,4 @@
-use eframe::egui::{self, Color32, RichText, Sense, Stroke, Ui, Vec2};
+use eframe::egui::{self, RichText, Sense, Stroke, Ui, Vec2};
 
 use crate::model::{duration_label, ProgressInfo};
 
@@ -77,13 +77,4 @@ pub fn show(ui: &mut Ui, progress: &ProgressInfo, reduced_motion: bool) {
             ui.label(format!("• {speed}"));
         }
     });
-    ui.add_space(2.0);
-    let bar =
-        egui::ProgressBar::new(fraction).animate(progress.fraction.is_none() && !reduced_motion);
-    ui.add(bar);
-}
-
-#[allow(dead_code)]
-fn _color_for_docs() -> Color32 {
-    Color32::TRANSPARENT
 }
