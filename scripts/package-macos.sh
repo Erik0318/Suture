@@ -22,11 +22,13 @@ cp "$(command -v cd-paranoia)" "$macos/cd-paranoia"
 cp "$(brew --prefix curl)/bin/curl" "$macos/curl"
 cp "$(brew --prefix ca-certificates)/share/ca-certificates/cacert.pem" "$macos/ca-certificates.crt"
 
+bundle_args=()
 for executable in "$macos"/*; do
   if file "$executable" | grep -q 'Mach-O'; then
-    dylibbundler -od -b -x "$executable" -d "$libs" -p '@executable_path/../libs/'
+    bundle_args+=(-x "$executable")
   fi
 done
+dylibbundler -od -b "${bundle_args[@]}" -d "$libs" -p '@executable_path/../libs/'
 
 if find "$macos" "$libs" -type f -exec otool -L {} \; 2>/dev/null \
     | grep -E '/opt/homebrew|/usr/local/(Cellar|opt)'; then
