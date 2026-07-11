@@ -33,6 +33,13 @@ jobs:
           chmod +x linuxdeploy-x86_64.AppImage scripts/package-appimage.sh
       - name: Package AppImage
         run: scripts/package-appimage.sh "${GITHUB_REF_NAME#v}"
+      - name: Validate bundled tools
+        run: |
+          APPIMAGE_EXTRACT_AND_RUN=1 ./Suture-*.AppImage --appimage-extract
+          env -i HOME="$HOME" PATH=/usr/bin:/bin squashfs-root/usr/bin/ffmpeg -version
+          env -i HOME="$HOME" PATH=/usr/bin:/bin squashfs-root/usr/bin/ffprobe -version
+          env -i HOME="$HOME" PATH=/usr/bin:/bin squashfs-root/usr/bin/cdparanoia --version
+          ! ldd squashfs-root/usr/bin/ffprobe | grep -q 'not found'
       - name: Release
         uses: softprops/action-gh-release@v2
         with:

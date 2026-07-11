@@ -108,7 +108,11 @@ pub fn spawn(inputs: Vec<PathBuf>, recursive: bool, tx: Sender<UiEvent>) {
             let message = if warnings.is_empty() {
                 "No usable audio streams were found".into()
             } else {
-                warnings.join("\n")
+                let failed = warnings.len();
+                format!(
+                    "No usable audio streams were found. {failed} file(s) could not be read.\n\nFirst error:\n{}",
+                    warnings[0]
+                )
             };
             let _ = tx.send(UiEvent::ScanFailed(message));
             return;

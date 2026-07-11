@@ -228,6 +228,7 @@ pub struct CdDrive {
     pub device: PathBuf,
     pub name: String,
     pub audio_media: bool,
+    pub audio_tracks: Option<u32>,
 }
 
 #[derive(Debug, Clone)]

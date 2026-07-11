@@ -41,6 +41,10 @@ pub fn enumerate_drives() -> anyhow::Result<Vec<CdDrive>> {
             device: devnode.to_path_buf(),
             name: format!("{vendor} {model}").trim().to_owned(),
             audio_media: device.property_value("ID_CDROM_MEDIA_AUDIO").is_some(),
+            audio_tracks: device
+                .property_value("ID_CDROM_MEDIA_TRACK_COUNT_AUDIO")
+                .and_then(|value| value.to_str())
+                .and_then(|value| value.parse().ok()),
         });
     }
     drives.sort_by(|a, b| a.device.cmp(&b.device));
@@ -54,12 +58,12 @@ pub fn enumerate_drives() -> anyhow::Result<Vec<CdDrive>> {
 
 pub fn spawn_drive_monitor(tx: Sender<UiEvent>) {
     thread::spawn(move || {
-        let mut previous = Vec::<(PathBuf, bool)>::new();
+        let mut previous = Vec::<(PathBuf, bool, Option<u32>)>::new();
         loop {
             if let Ok(drives) = enumerate_drives() {
                 let snapshot = drives
                     .iter()
-                    .map(|drive| (drive.device.clone(), drive.audio_media))
+                    .map(|drive| (drive.device.clone(), drive.audio_media, drive.audio_tracks))
                     .collect::<Vec<_>>();
                 if snapshot != previous {
                     previous = snapshot;

@@ -2,7 +2,7 @@ use std::{
     collections::BTreeSet,
     fs,
     path::{Path, PathBuf},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use crossbeam_channel::{unbounded, Receiver, Sender};
@@ -37,6 +37,7 @@ pub struct SutureApp {
     drives: Vec<CdDrive>,
     selected_drive: usize,
     toc_requested: Option<PathBuf>,
+    toc_started: Option<Instant>,
     disc: Option<CdDisc>,
     cd_reader_available: bool,
     confirm_overwrite: bool,
@@ -85,6 +86,7 @@ impl SutureApp {
             drives: Vec::new(),
             selected_drive: 0,
             toc_requested: None,
+            toc_started: None,
             disc: None,
             cd_reader_available,
             confirm_overwrite: false,
@@ -141,19 +143,25 @@ impl SutureApp {
 
     fn handle_dropped_files(&mut self, ctx: &egui::Context) {
         let dropped = ctx.input(|input| input.raw.dropped_files.clone());
-        if dropped.is_empty() || self.busy {
+        if dropped.is_empty() {
             return;
         }
         let paths = dropped
             .into_iter()
             .filter_map(|file| file.path)
             .collect::<Vec<_>>();
-        if let Some(image) = paths.iter().find(|path| cover::looks_like_image(path)) {
+        if let Some(image) = paths
+            .iter()
+            .find(|path| path.is_file() && cover::is_image_content(path))
+        {
             self.set_cover(image.clone(), ctx);
+        }
+        if self.busy {
+            return;
         }
         let media = paths
             .into_iter()
-            .filter(|path| path.is_dir() || !cover::looks_like_image(path))
+            .filter(|path| path.is_dir() || !cover::is_image_content(path))
             .collect();
         self.start_scan(media);
     }
@@ -195,20 +203,25 @@ impl SutureApp {
                     if let Some(drive) = self.drives.iter().find(|drive| drive.audio_media) {
                         if self.toc_requested.as_ref() != Some(&drive.device) && !self.busy {
                             self.toc_requested = Some(drive.device.clone());
+                            self.toc_started = Some(Instant::now());
                             cd::spawn_read_disc(drive.clone(), self.tx.clone());
                         }
                     } else {
                         self.disc = None;
                         self.toc_requested = None;
+                        self.toc_started = None;
                     }
                 }
-                UiEvent::DiscRead(result) => match result {
-                    Ok(disc) => self.disc = Some(disc),
-                    Err(message) => {
-                        self.warnings.push(message);
-                        self.disc = None;
+                UiEvent::DiscRead(result) => {
+                    self.toc_started = None;
+                    match result {
+                        Ok(disc) => self.disc = Some(disc),
+                        Err(message) => {
+                            self.warnings.push(message);
+                            self.disc = None;
+                        }
                     }
-                },
+                }
                 UiEvent::CdImported(tracks) => {
                     for track in &tracks {
                         if let Some(parent) = track.path.parent() {
@@ -391,7 +404,7 @@ impl SutureApp {
     }
 
     fn show_top_bar(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             ui.heading("Suture");
             ui.label(RichText::new("stitch tracks into one continuous piece").weak());
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
@@ -451,7 +464,7 @@ impl SutureApp {
             return;
         }
         egui::Frame::group(ui.style()).show(ui, |ui| {
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 ui.label(RichText::new("Audio CD").strong());
                 if self.drives.len() > 1 {
                     egui::ComboBox::from_id_salt("cd-drive")
@@ -468,7 +481,29 @@ impl SutureApp {
                         self.drives[0].device.display()
                     ));
                 }
-                if let Some(disc) = &self.disc {
+                if let Some(started) = self.toc_started {
+                    ui.spinner();
+                    let elapsed = started.elapsed().as_secs_f32();
+                    let stages = [
+                        "Waking the optical drive",
+                        "Tracing the track boundaries",
+                        "Stitching the disc map",
+                    ];
+                    let stage = stages[((elapsed / 3.0) as usize).min(stages.len() - 1)];
+                    let detected_tracks = self.drives[self.selected_drive]
+                        .audio_tracks
+                        .map(|count| format!("{count} audio tracks detected • "))
+                        .unwrap_or_default();
+                    ui.label(format!(
+                        "{detected_tracks}{stage}… {elapsed:.0}s"
+                    ));
+                    ui.label(
+                        RichText::new(
+                            "The drive is responding; older or damaged discs can take longer.",
+                        )
+                        .weak(),
+                    );
+                } else if let Some(disc) = &self.disc {
                     ui.label(format!(
                         "{} tracks • {}",
                         disc.tracks.len(),
@@ -488,6 +523,7 @@ impl SutureApp {
                 {
                     let drive = self.drives[self.selected_drive].clone();
                     self.toc_requested = Some(drive.device.clone());
+                    self.toc_started = Some(Instant::now());
                     cd::spawn_read_disc(drive, self.tx.clone());
                 }
             });
@@ -497,9 +533,24 @@ impl SutureApp {
     fn show_cover(&mut self, ui: &mut egui::Ui, ctx: &egui::Context) {
         ui.vertical(|ui| {
             ui.label(RichText::new("Cover").strong());
-            let size = egui::vec2(ui.available_width().min(280.0), 250.0);
-            egui::Frame::group(ui.style()).show(ui, |ui| {
-                ui.set_min_size(size);
+            let width = ui.available_width().clamp(180.0, 280.0);
+            let size = egui::vec2(width, (width * 0.9).clamp(160.0, 250.0));
+            let cover_hovered = ctx.input(|input| {
+                input.raw.hovered_files.iter().any(|file| {
+                    file.path
+                        .as_deref()
+                        .is_some_and(|path| cover::looks_like_image(path))
+                })
+            });
+            let mut frame = egui::Frame::group(ui.style());
+            if cover_hovered {
+                frame = frame
+                    .fill(ui.visuals().selection.bg_fill.linear_multiply(0.35))
+                    .stroke(egui::Stroke::new(2.0, ui.visuals().selection.stroke.color));
+            }
+            frame.show(ui, |ui| {
+                ui.set_width(size.x);
+                ui.set_height(size.y);
                 if let Some(texture) = &self.cover_texture {
                     let source = texture.size_vec2();
                     let scale = (size.x / source.x).min(size.y / source.y);
@@ -508,7 +559,11 @@ impl SutureApp {
                     });
                 } else {
                     ui.centered_and_justified(|ui| {
-                        ui.label("Drop a cover here\nor choose one manually");
+                        ui.label(if cover_hovered {
+                            "Release to use this cover"
+                        } else {
+                            "Drop a cover here\nor choose one manually"
+                        });
                     });
                 }
             });
@@ -853,8 +908,13 @@ impl SutureApp {
             egui::Window::new("Suture could not finish")
                 .collapsible(false)
                 .resizable(true)
+                .default_width(560.0)
+                .max_width(760.0)
+                .max_height(520.0)
                 .show(ctx, |ui| {
-                    ui.label(message);
+                    egui::ScrollArea::vertical().show(ui, |ui| {
+                        ui.label(message);
+                    });
                     if ui.button("Close").clicked() {
                         self.error = None;
                     }
@@ -884,7 +944,7 @@ impl eframe::App for SutureApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.process_events(ctx);
         self.handle_dropped_files(ctx);
-        if self.busy || self.dragging.is_some() {
+        if self.busy || self.dragging.is_some() || self.toc_started.is_some() {
             ctx.request_repaint_after(Duration::from_millis(33));
         } else {
             ctx.request_repaint_after(Duration::from_secs(1));
@@ -896,23 +956,31 @@ impl eframe::App for SutureApp {
             ui.add_space(8.0);
         });
         egui::CentralPanel::default().show(ctx, |ui| {
-            self.show_cd_card(ui);
-            ui.add_space(8.0);
-            ui.columns(2, |columns| {
-                self.show_cover(&mut columns[0], ctx);
-                self.show_track_list(&mut columns[1]);
-            });
-            self.show_export_panel(ui);
-            if let Some(progress) = &self.progress {
+            egui::ScrollArea::vertical().show(ui, |ui| {
+                self.show_cd_card(ui);
                 ui.add_space(8.0);
-                ui::progress::show(ui, progress, self.settings.reduced_motion);
-                if ui.button("Cancel").clicked() {
-                    if let Some(cancel) = &self.cancel {
-                        cancel.cancel();
+                if ui.available_width() >= 820.0 {
+                    ui.columns(2, |columns| {
+                        self.show_cover(&mut columns[0], ctx);
+                        self.show_track_list(&mut columns[1]);
+                    });
+                } else {
+                    self.show_cover(ui, ctx);
+                    ui.separator();
+                    self.show_track_list(ui);
+                }
+                self.show_export_panel(ui);
+                if let Some(progress) = &self.progress {
+                    ui.add_space(8.0);
+                    ui::progress::show(ui, progress, self.settings.reduced_motion);
+                    if ui.button("Cancel").clicked() {
+                        if let Some(cancel) = &self.cancel {
+                            cancel.cancel();
+                        }
                     }
                 }
-            }
-            self.show_notices(ui);
+                self.show_notices(ui);
+            });
         });
         self.show_dialogs(ctx);
 
