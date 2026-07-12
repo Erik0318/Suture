@@ -144,6 +144,146 @@ jobs:
           & "$app/curl.exe" --version
           & "$app/cd-paranoia.exe" --version
           if (-not (Test-Path "$app/ca-certificates.crt")) { throw "CA bundle missing" }
+          $checksumPath = "dist-windows/Suture1.0.0-Windows-x86_64-Setup.exe.sha256"
+          $checksum = Get-Content $checksumPath -Raw
+          if ($checksum.Contains("`r") -or -not $checksum.EndsWith("`n")) {
+            throw "Windows checksum must use a single portable LF ending"
+          }
+          $line = $checksum.Substring(0, $checksum.Length - 1)
+          if ($line.Contains("`n") -or $line -notmatch '^([0-9a-f]{64})  Suture1\.0\.0-Windows-x86_64-Setup\.exe
+      - name: Packaged application self-test
+        shell: pwsh
+        run: |
+          # PowerShell does not wait for Windows-subsystem GUI executables when
+          # invoked with `&`, so $LASTEXITCODE is unset even after a clean exit.
+          $process = Start-Process -FilePath "dist-windows/app/Suture.exe" -ArgumentList "--self-test" -Wait -PassThru -NoNewWindow
+          if ($process.ExitCode -ne 0) {
+            throw "Packaged Suture self-test failed with $($process.ExitCode)"
+          }
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: Suture1.0.0-Windows
+          path: |
+            dist-windows/Suture1.0.0-Windows-x86_64-Setup.exe
+            dist-windows/Suture1.0.0-Windows-x86_64-Setup.exe.sha256
+
+  macos:
+    if: github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    needs: windows
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30
+        with:
+          toolchain: 1.97.0
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32
+      - name: Install media and packaging tools
+        run: brew install ffmpeg curl libcdio-paranoia dylibbundler ca-certificates
+      - name: Tests
+        run: cargo test --locked --all-features
+      - name: Build release binary
+        run: cargo build --locked --release
+      - name: Package application
+        run: scripts/package-macos.sh 1.0.0
+      - name: Inspect bundled tools
+        run: |
+          app="dist-macos/Suture.app/Contents/MacOS"
+          "$app/ffmpeg" -version
+          "$app/ffprobe" -version
+          "$app/curl" --version
+          "$app/cd-paranoia" --version
+          codesign --verify --deep --strict "dist-macos/Suture.app"
+          checksums=(Suture1.0.0-macOS-*.dmg.sha256)
+          test "${#checksums[@]}" -eq 1
+          shasum -a 256 -c "${checksums[0]}"
+      - name: Launch smoke test
+        run: |
+          "dist-macos/Suture.app/Contents/MacOS/Suture" &
+          pid=$!
+          sleep 8
+          if ! kill -0 "$pid" 2>/dev/null; then
+            wait "$pid"
+            exit $?
+          fi
+          kill "$pid"
+          wait "$pid" || true
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: Suture1.0.0-macOS
+          path: |
+            Suture1.0.0-macOS-*.dmg
+            Suture1.0.0-macOS-*.dmg.sha256
+
+  release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [appimage, windows, macos]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          pattern: Suture1.0.0-*
+          path: release-assets
+          merge-multiple: true
+      - name: Inspect release files
+        run: |
+          find release-assets -maxdepth 1 -type f -printf '%f\n' | sort
+          test -f release-assets/Suture1.0.0.AppImage
+          test -f release-assets/Suture1.0.0-Windows-x86_64-Setup.exe
+          test "$(find release-assets -maxdepth 1 -name 'Suture1.0.0-macOS-*.dmg' | wc -l)" -eq 1
+          (
+            cd release-assets
+            sha256sum -c Suture1.0.0.AppImage.sha256
+            sha256sum -c Suture1.0.0-Windows-x86_64-Setup.exe.sha256
+            checksums=(Suture1.0.0-macOS-*.dmg.sha256)
+            test "${#checksums[@]}" -eq 1
+            sha256sum -c "${checksums[0]}"
+          )
+      - name: Publish Suture 1.0.0
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65
+        with:
+          tag_name: v1.0.0
+          name: Suture 1.0.0
+          prerelease: false
+          make_latest: true
+          generate_release_notes: true
+          body: |
+            Suture 1.0.0 for Linux, Windows, and macOS. Each download is self-contained and includes FFmpeg, ffprobe, curl, and the cross-platform libcdio-paranoia CD reader.
+
+            Audio/video export, file and folder import, optical-drive discovery, separate CD track export, MusicBrainz TOC matching, Unicode timestamps, bundled-tool startup, and native launch checks are preserved across platforms.
+
+            The Windows installer and macOS application are currently unsigned, so the operating system may ask the user to approve the first launch.
+          files: |
+            release-assets/*
+            LICENSE
+            THIRD_PARTY_NOTICES.md
+            CHANGELOG.md
+      - name: Verify the sole release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          assets="$(gh release view v1.0.0 --json assets --jq '.assets[].name')"
+          grep -Fx 'Suture1.0.0.AppImage' <<<"$assets"
+          grep -Fx 'Suture1.0.0-Windows-x86_64-Setup.exe' <<<"$assets"
+          grep -Ex 'Suture1\.0\.0-macOS-(arm64|x86_64)\.dmg' <<<"$assets"
+          for tag in v0.1.0-alpha.1 v0.1.0-alpha.2; do
+            if gh release view "$tag" >/dev/null 2>&1; then
+              gh release delete "$tag" --yes
+            fi
+          done
+          remaining="$(gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=100" \
+            --jq 'map(select(.tag_name != "v1.0.0")) | length')"
+          test "$remaining" -eq 0
+          gh api --method POST "repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}" \
+            -f state=success \
+            -f context='suture/release-invariant' \
+            -f description='Only v1.0.0 with Linux, Windows, and macOS apps remains' \
+            >/dev/null
+) {
+            throw "Windows checksum has an invalid format"
+          }
+          $actual = (Get-FileHash "dist-windows/Suture1.0.0-Windows-x86_64-Setup.exe" -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $Matches[1]) { throw "Windows installer checksum mismatch" }
       - name: Packaged application self-test
         shell: pwsh
         run: |
