@@ -51,4 +51,5 @@ if (-not (Test-Path $Iscc)) { throw "Inno Setup 6 is unavailable" }
 $Installer = Join-Path $Dist "Suture${Version}-Windows-x86_64-Setup.exe"
 if (-not (Test-Path $Installer)) { throw "Windows installer was not created" }
 $Hash = (Get-FileHash $Installer -Algorithm SHA256).Hash.ToLowerInvariant()
-"$Hash  $([IO.Path]::GetFileName($Installer))" | Set-Content "$Installer.sha256" -Encoding ascii
+$Checksum = "$Hash  $([IO.Path]::GetFileName($Installer))`n"
+[IO.File]::WriteAllText("$Installer.sha256", $Checksum, [Text.Encoding]::ASCII)

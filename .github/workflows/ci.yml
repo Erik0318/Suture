@@ -144,6 +144,17 @@ jobs:
           & "$app/curl.exe" --version
           & "$app/cd-paranoia.exe" --version
           if (-not (Test-Path "$app/ca-certificates.crt")) { throw "CA bundle missing" }
+          $checksumPath = "dist-windows/Suture1.0.0-Windows-x86_64-Setup.exe.sha256"
+          $checksum = Get-Content $checksumPath -Raw
+          if ($checksum.Contains("`r") -or -not $checksum.EndsWith("`n")) {
+            throw "Windows checksum must use a single portable LF ending"
+          }
+          $line = $checksum.Substring(0, $checksum.Length - 1)
+          if ($line.Contains("`n") -or $line -notmatch '^([0-9a-f]{64})  Suture1\.0\.0-Windows-x86_64-Setup\.exe$') {
+            throw "Windows checksum has an invalid format"
+          }
+          $actual = (Get-FileHash "dist-windows/Suture1.0.0-Windows-x86_64-Setup.exe" -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $Matches[1]) { throw "Windows installer checksum mismatch" }
       - name: Packaged application self-test
         shell: pwsh
         run: |
