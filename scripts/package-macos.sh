@@ -42,4 +42,5 @@ plutil -lint "$app/Contents/Info.plist"
 
 output="$root/Suture${version}-macOS-${arch}.dmg"
 hdiutil create -volname "Suture ${version}" -srcfolder "$app" -ov -format UDZO "$output"
-shasum -a 256 "$output" > "$output.sha256"
+hash="$(shasum -a 256 "$output" | awk '{print $1}')"
+printf '%s  %s\n' "$hash" "$(basename "$output")" > "$output.sha256"
