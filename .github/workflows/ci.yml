@@ -186,6 +186,9 @@ jobs:
           "$app/curl" --version
           "$app/cd-paranoia" --version
           codesign --verify --deep --strict "dist-macos/Suture.app"
+          checksums=(Suture1.0.0-macOS-*.dmg.sha256)
+          test "${#checksums[@]}" -eq 1
+          shasum -a 256 -c "${checksums[0]}"
       - name: Launch smoke test
         run: |
           "dist-macos/Suture.app/Contents/MacOS/Suture" &
@@ -221,6 +224,14 @@ jobs:
           test -f release-assets/Suture1.0.0.AppImage
           test -f release-assets/Suture1.0.0-Windows-x86_64-Setup.exe
           test "$(find release-assets -maxdepth 1 -name 'Suture1.0.0-macOS-*.dmg' | wc -l)" -eq 1
+          (
+            cd release-assets
+            sha256sum -c Suture1.0.0.AppImage.sha256
+            sha256sum -c Suture1.0.0-Windows-x86_64-Setup.exe.sha256
+            checksums=(Suture1.0.0-macOS-*.dmg.sha256)
+            test "${#checksums[@]}" -eq 1
+            sha256sum -c "${checksums[0]}"
+          )
       - name: Publish Suture 1.0.0
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65
         with:
